@@ -1,0 +1,312 @@
+---
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="/logo-positivo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>A&D — Propuestas de diseño</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,200;0,300;0,400;1,200;1,300&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <main>
+    <header class="selector-header">
+      <img src="/logo-positivo.png" alt="A&D" class="sel-logo" />
+      <h1 class="sel-title">Aimar <span>&</span> Deborah</h1>
+      <p class="sel-sub">Tres propuestas de diseño para la web de boda</p>
+    </header>
+
+    <div class="cards">
+
+      <a href="/v1" class="card">
+        <div class="card-preview p1">
+          <div class="p1-photo"></div>
+          <div class="p1-text">
+            <span class="p-script">Aimar & Deborah</span>
+            <span class="p-date">12 · 09 · 2026</span>
+          </div>
+        </div>
+        <div class="card-info">
+          <span class="card-num">01</span>
+          <h2>Clásica Elegante</h2>
+          <p>Crema y negro. Vinilo giratorio animado. Tipografía script sobre fondo luminoso.</p>
+          <span class="card-cta">Ver propuesta →</span>
+        </div>
+      </a>
+
+      <a href="/v2" class="card">
+        <div class="card-preview p2">
+          <div class="p2-photo"></div>
+          <div class="p2-text">
+            <span class="p-script-w">Aimar & Deborah</span>
+            <span class="p-date-w">12 · 09 · 2026</span>
+          </div>
+        </div>
+        <div class="card-info">
+          <span class="card-num">02</span>
+          <h2>Cálida Elegante</h2>
+          <p>Mezcla de la clásica y la romántica. Hero a pantalla completa, vinilo animado y paleta blush cálida.</p>
+          <span class="card-cta">Ver propuesta →</span>
+        </div>
+      </a>
+
+      <a href="/v3" class="card">
+        <div class="card-preview p3">
+          <div class="p3-photo"></div>
+          <div class="p3-text">
+            <span class="p-script-r">Aimar & Deborah</span>
+            <span class="p-date-r">12 · 09 · 2026</span>
+          </div>
+        </div>
+        <div class="card-info">
+          <span class="card-num">03</span>
+          <h2>Romántica Natural</h2>
+          <p>Tonos blush y nude. Foto estilo polaroid. Atmósfera suave y romántica.</p>
+          <span class="card-cta">Ver propuesta →</span>
+        </div>
+      </a>
+
+    </div>
+
+    <footer class="sel-footer">
+      <p>deborahyaimar.com · 12 · 09 · 2026</p>
+    </footer>
+  </main>
+
+</body>
+</html>
+
+<style is:global>
+  @font-face {
+    font-family: 'Sloop';
+    src: url('/fonts/Sloop-ScriptThree.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #111;
+    color: #f5f5f0;
+    font-family: 'Raleway', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  main {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 5rem 2rem;
+  }
+
+  .selector-header {
+    text-align: center;
+    margin-bottom: 5rem;
+  }
+
+  .sel-logo {
+    width: 48px;
+    filter: invert(1);
+    margin-bottom: 1.5rem;
+    opacity: 0.7;
+  }
+
+  .sel-title {
+    font-family: 'Sloop', cursive;
+    font-size: clamp(3rem, 8vw, 6rem);
+    font-weight: normal;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 1rem;
+  }
+
+  .sel-title span {
+    opacity: 0.6;
+  }
+
+  .sel-sub {
+    font-size: 0.78rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.4);
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .card {
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+    border: 1px solid #2a2a2a;
+    border-radius: 3px;
+    overflow: hidden;
+    transition: border-color 0.3s, transform 0.3s;
+  }
+
+  .card:hover {
+    border-color: #F2B3CE;
+    transform: translateY(-4px);
+  }
+
+  /* PREVIEW THUMBNAILS */
+  .card-preview {
+    height: 220px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* V1 preview */
+  .p1 { background: #FAFAF7; }
+  .p1-photo {
+    position: absolute;
+    inset: 0;
+    background: url('/foto.jpeg') center 30% / cover;
+    opacity: 0.55;
+    filter: grayscale(15%);
+  }
+  .p1-text {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    right: 1.5rem;
+  }
+  .p-script {
+    display: block;
+    font-family: 'Sloop', cursive;
+    font-size: 1.8rem;
+    color: #fff;
+    text-shadow: 0 1px 8px rgba(0,0,0,0.4);
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .p-date {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: rgba(255,255,255,0.8);
+  }
+
+  /* V2 preview */
+  .p2 { background: #0D0D0D; }
+  .p2-photo {
+    position: absolute;
+    inset: 0;
+    background: url('/foto.jpeg') center 30% / cover;
+    opacity: 0.35;
+    filter: grayscale(40%);
+  }
+  .p2-text {
+    position: absolute;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    right: 1.5rem;
+  }
+  .p-script-w {
+    display: block;
+    font-family: 'Sloop', cursive;
+    font-size: 1.8rem;
+    color: #F2B3CE;
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .p-date-w {
+    display: block;
+    font-size: 0.65rem;
+    letter-spacing: 0.25em;
+    color: rgba(255,255,255,0.5);
+  }
+
+  /* V3 preview */
+  .p3 { background: #FCF8F4; }
+  .p3-photo {
+    position: absolute;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%) rotate(-1.5deg);
+    width: 55%;
+    height: 80%;
+    background: url('/foto.jpeg') center 30% / cover;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+    border: 5px solid #fff;
+  }
+  .p3-text {
+    position: absolute;
+    bottom: 1.2rem;
+    right: 1.5rem;
+    text-align: right;
+  }
+  .p-script-r {
+    display: block;
+    font-family: 'Sloop', cursive;
+    font-size: 1.5rem;
+    color: #8B4356;
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .p-date-r {
+    display: block;
+    font-size: 0.6rem;
+    letter-spacing: 0.2em;
+    color: #9e6070;
+  }
+
+  /* CARD INFO */
+  .card-info {
+    padding: 1.75rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .card-num {
+    font-size: 0.65rem;
+    letter-spacing: 0.2em;
+    color: #F2B3CE;
+    font-weight: 400;
+  }
+
+  .card-info h2 {
+    font-size: 1.1rem;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+    color: #f5f5f0;
+  }
+
+  .card-info p {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.45);
+    line-height: 1.6;
+    font-weight: 300;
+    flex: 1;
+  }
+
+  .card-cta {
+    font-size: 0.72rem;
+    letter-spacing: 0.15em;
+    color: #F2B3CE;
+    font-weight: 300;
+    margin-top: 0.5rem;
+  }
+
+  .sel-footer {
+    text-align: center;
+    margin-top: 5rem;
+    font-size: 0.7rem;
+    letter-spacing: 0.15em;
+    color: rgba(255,255,255,0.2);
+  }
+</style>
