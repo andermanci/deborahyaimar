@@ -29,7 +29,7 @@
     <img src="/logo-positivo.png" alt="A&D monogram" class="nav-logo" />
   </nav>
 
-  <!-- HERO (de V1: foto a pantalla completa, texto centrado) -->
+  <!-- HERO -->
   <section class="hero">
     <div class="hero-image-wrap">
       <img src="/foto.jpeg" alt="Aimar y Deborah" class="hero-img" />
@@ -44,32 +44,64 @@
     <div class="hero-scroll"><span class="scroll-line"></span></div>
   </section>
 
-  <!-- VINYL: sticky container que crea el runway de scroll -->
+  <!-- FUNDA + VINILO ─────────────────────────────────────────── -->
+  <!--
+    Capas dentro de .sleeve-scene (stacking context de .invitacion):
+      z:1  .sleeve-back  — cara posterior de la funda (plana, oscura)
+      z:2→5 .vinyl-riser — el disco: sube por detrás de la portada,
+                           pasa a z:5 cuando la funda ya es invisible
+      z:3  .sleeve-front — portada (foto + texto): enmascara el disco
+                           mientras está dentro de la funda
+  -->
   <div class="vinyl-sticky-container" id="invitacion">
     <section class="invitacion">
       <div class="vinyl-scene-bg"></div>
-      <!-- .vinyl-box: el marco circular del que el disco "escapa" al hacer scroll -->
-      <div class="vinyl-box">
-        <!-- .vinyl-escape-wrapper: controla el scale scroll-driven (independiente de la rotación) -->
-        <div class="vinyl-escape-wrapper">
-        <div class="vinyl-record">
-          <div class="vinyl-grooves"></div>
-          <div class="vinyl-label">
-            <div class="vinyl-label-inner">
-              <p>Dicen que las mejores canciones nacen de mezclas inesperadas. Dos estilos distintos, dos formas de ser y una canción que encaja a la perfección.</p>
-              <p>Después de un tiempo sonando juntos, hemos decidido que esta canción dure para siempre.</p>
-              <p class="vinyl-cta">Dale al play con nosotros el</p>
-              <p class="vinyl-date-small">12 · 09 · 2026</p>
-              <div class="vinyl-hole"></div>
+
+      <div class="sleeve-scene">
+
+        <!-- CARA POSTERIOR de la funda -->
+        <div class="sleeve-back" id="sleeveBack"></div>
+
+        <!-- DISCO VINILO (empieza en z:2, detrás de la portada) -->
+        <div class="vinyl-riser" id="vinylRiser">
+          <div class="vinyl-record" id="vinylDisc">
+            <div class="vinyl-grooves"></div>
+            <div class="vinyl-label">
+              <div class="vinyl-label-inner">
+                <p>Dicen que las mejores canciones nacen de mezclas inesperadas. Dos estilos distintos, dos formas de ser y una canción que encaja a la perfección.</p>
+                <p>Después de un tiempo sonando juntos, hemos decidido que esta canción dure para siempre.</p>
+                <p class="vinyl-cta">Dale al play con nosotros el</p>
+                <p class="vinyl-date-small">12 · 09 · 2026</p>
+                <div class="vinyl-hole"></div>
+              </div>
             </div>
           </div>
         </div>
-        </div> <!-- /vinyl-escape-wrapper -->
-      </div> <!-- /vinyl-box -->
+
+        <!-- PORTADA de la funda: diseño inspirado en el sobre real -->
+        <div class="sleeve-front" id="sleeveFront">
+          <!-- Foto de la pareja (lado derecho, como en el PDF) -->
+          <div class="sf-photo">
+            <img src="/foto.jpeg" alt="Aimar y Deborah" />
+          </div>
+          <!-- Borde superior abierto (sombra interior que sugiere la ranura de entrada) -->
+          <div class="sf-top-shadow"></div>
+          <!-- Nombres en script (esquina superior derecha, sobre la foto) -->
+          <p class="sf-script">Aimar <span class="sf-amp">&</span> Deborah</p>
+          <!-- Datos (esquina inferior izquierda, en el espacio blanco) -->
+          <div class="sf-info">
+            <p class="sf-date">12 · 09 · 2026</p>
+            <p class="sf-venue">Palacio de Murguia</p>
+          </div>
+          <!-- Monograma (esquina inferior derecha) -->
+          <img src="/logo-positivo.png" alt="A&D" class="sf-mono" />
+        </div>
+
+      </div><!-- /sleeve-scene -->
     </section>
   </div>
 
-  <!-- DETALLES (de V3: tarjetas blancas con foto polaroid) -->
+  <!-- DETALLES -->
   <section class="detalles" id="detalles">
     <h2 class="section-title reveal">La celebración</h2>
     <div class="deco-line reveal" style="transition-delay:0.1s"></div>
@@ -115,7 +147,7 @@
     </div>
   </section>
 
-  <!-- MAPA (de V3: dos columnas texto + iframe) -->
+  <!-- MAPA -->
   <section class="mapa" id="mapa">
     <div class="mapa-inner reveal">
       <div class="mapa-text">
@@ -136,7 +168,7 @@
     </div>
   </section>
 
-  <!-- RSVP (de V3: fondo oscuro con foto, tarjetas de contacto) -->
+  <!-- RSVP -->
   <section class="rsvp" id="confirmacion">
     <div class="rsvp-photo-bg"></div>
     <div class="rsvp-inner reveal">
@@ -162,7 +194,7 @@
   </footer>
 
 <script>
-  // ── SNAP TO STRAIGHT ──────────────────────────────────────────
+  // ── SNAP TO STRAIGHT ON HOVER ─────────────────────────────
   const disc = document.querySelector('.vinyl-record') as HTMLElement;
   const SPIN_MS = 20000;
   let spinStart = Date.now();
@@ -196,39 +228,74 @@
   disc.addEventListener('touchstart', snapStraight, { passive: true });
   disc.addEventListener('touchend',   resumeSpin,   { passive: true });
 
-  // ── VINYL ESCAPE ON SCROLL ────────────────────────────────────
+  // ── FUNDA + VINILO: ANIMACIÓN DE SCROLL ──────────────────
+  //
+  // El vinilo (z:2) está apilado entre la cara posterior (z:1) y la portada (z:3).
+  // Mientras el vinilo está DENTRO de la funda, la portada (z:3) lo enmascara
+  // naturalmente: sólo la parte que sobresale por arriba de la portada es visible.
+  // Cuando la funda llega casi a 0% de opacidad, se hace el cambio de z-index
+  // (z:2→5) sin que se note, y el disco queda girando libre.
+
   const stickyContainer = document.querySelector('.vinyl-sticky-container') as HTMLElement;
   const sceneBg         = document.querySelector('.vinyl-scene-bg')         as HTMLElement;
-  const vinylBox        = document.querySelector('.vinyl-box')               as HTMLElement;
-  const escapeWrapper   = document.querySelector('.vinyl-escape-wrapper')    as HTMLElement;
+  const sleeveFront     = document.querySelector('#sleeveFront')            as HTMLElement;
+  const sleeveBack      = document.querySelector('#sleeveBack')             as HTMLElement;
+  const vinylRiser      = document.querySelector('#vinylRiser')             as HTMLElement;
 
-  // easing suave
+  // easing cuadrático suave
   function ease(t: number) { return t < 0.5 ? 2*t*t : -1+(4-2*t)*t; }
-
-  function updateEscape() {
-    const rect      = stickyContainer.getBoundingClientRect();
-    const maxScroll = stickyContainer.offsetHeight - window.innerHeight;
-    const progress  = Math.max(0, Math.min(1, -rect.top / maxScroll));
-
-    // — Fondo oscuro desaparece: 0.35 → 0.75
-    const bgP = Math.max(0, Math.min(1, (progress - 0.35) / 0.40));
-    sceneBg.style.opacity = String(1 - ease(bgP));
-
-    // — Marco circular (vinyl-box border) desaparece: 0.10 → 0.50
-    const boxP = Math.max(0, Math.min(1, (progress - 0.10) / 0.40));
-    const borderAlpha = 0.35 * (1 - ease(boxP));
-    vinylBox.style.setProperty('--box-alpha', String(borderAlpha));
-
-    // — Vinilo crece: empieza en 0.55, llega a 1.0 entre 0.10 y 0.65
-    const scaleP = Math.max(0, Math.min(1, (progress - 0.10) / 0.55));
-    const scale  = 0.55 + 0.45 * ease(scaleP);
-    escapeWrapper.style.transform = `scale(${scale})`;
+  // normaliza progress entre [a, b] → [0, 1]
+  function seg(p: number, a: number, b: number) {
+    return Math.max(0, Math.min(1, (p - a) / (b - a)));
   }
 
-  window.addEventListener('scroll', updateEscape, { passive: true });
-  updateEscape();
+  // Posición vertical del vinilo en vh (positivo = abajo, negativo = arriba)
+  // Empieza en 0 (centrado, oculto detrás de la portada) y sube hasta -20vh
+  function vinylVh(p: number): number {
+    if (p < 0.65) return -9 + (-11) * ease(seg(p, 0.00, 0.65)); // sube: -9 → -20vh
+    return -20 + 20 * ease(seg(p, 0.65, 0.92));                 // se asienta: -20 → 0
+  }
 
-  // ── FADE-IN DE SECCIONES ──────────────────────────────────────
+  let vinylFront = false;
+
+  function updateScene() {
+    const rect      = stickyContainer.getBoundingClientRect();
+    const maxScroll = stickyContainer.offsetHeight - window.innerHeight;
+    const p         = Math.max(0, Math.min(1, -rect.top / maxScroll));
+
+    // ① VINILO SUBE Y SE ASIENTA
+    const vy = vinylVh(p);
+    vinylRiser.style.transform = `translate(-50%, calc(-50% + ${vy}vh))`;
+
+    // ② OPACIDAD DEL VINILO: aparece mientras emerge (0.05 → 0.45)
+    vinylRiser.style.opacity = String(ease(seg(p, 0.05, 0.45)));
+
+    // ③ CAMBIO DE Z-INDEX: cuando la funda es ya casi invisible (p > 0.72)
+    if (p > 0.72 && !vinylFront) {
+      vinylFront = true;
+      vinylRiser.style.zIndex = '5';
+    } else if (p <= 0.72 && vinylFront) {
+      vinylFront = false;
+      vinylRiser.style.zIndex = '2';
+    }
+
+    // ④ FUNDA SE DESVANECE Y BAJA (0.18 → 0.72)
+    const sleeveP  = ease(seg(p, 0.18, 0.72));
+    const sleeveOp = 1 - sleeveP;
+    const sleeveY  = `translateY(${8 * sleeveP}%)`;
+    sleeveFront.style.opacity   = String(sleeveOp);
+    sleeveFront.style.transform = sleeveY;
+    sleeveBack.style.opacity    = String(sleeveOp);
+    sleeveBack.style.transform  = sleeveY;
+
+    // ⑤ FONDO OSCURO DESAPARECE (0.62 → 0.92)
+    sceneBg.style.opacity = String(1 - ease(seg(p, 0.62, 0.92)));
+  }
+
+  window.addEventListener('scroll', updateScene, { passive: true });
+  updateScene();
+
+  // ── FADE-IN DE SECCIONES ──────────────────────────────────
   const fadeEls = document.querySelectorAll('.reveal');
   const io = new IntersectionObserver((entries) => {
     entries.forEach(e => {
@@ -265,7 +332,6 @@
     --dark: #1a1a1a;
     --gray: #8a7070;
     --border: #e6d8dc;
-    --gray-light: #ede8e4;
   }
 
   html { scroll-behavior: smooth; }
@@ -281,7 +347,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  /* VERSION NAV */
+  /* ── VERSION NAV ──────────────────────────────────────── */
   .vn {
     position: fixed; top: 0; left: 0; right: 0; z-index: 200;
     display: flex; align-items: center; justify-content: space-between;
@@ -291,11 +357,9 @@
     border-bottom: 1px solid var(--border);
     font-size: 0.7rem; letter-spacing: 0.12em;
   }
-
   .vn-back { color: var(--gray); text-decoration: none; transition: color 0.2s; }
   .vn-back:hover { color: var(--dark); }
   .vn-pills { display: flex; gap: 0.4rem; }
-
   .vn-pill {
     text-decoration: none; padding: 0.3rem 0.8rem;
     border-radius: 100px; border: 1px solid var(--border);
@@ -305,7 +369,7 @@
   .vn-pill:hover { border-color: var(--pink); color: var(--dark); }
   .vn-active { background: var(--rosewood); border-color: var(--rosewood); color: #fff !important; }
 
-  /* NAV */
+  /* ── NAV ──────────────────────────────────────────────── */
   nav {
     position: fixed; top: 42px; left: 0; right: 0; z-index: 100;
     display: flex; justify-content: center; padding: 1rem;
@@ -313,7 +377,7 @@
   }
   .nav-logo { width: 36px; opacity: 0.7; }
 
-  /* HERO */
+  /* ── HERO ─────────────────────────────────────────────── */
   .hero {
     position: relative; height: 100svh; min-height: 600px;
     display: flex; align-items: center; justify-content: center; overflow: hidden;
@@ -325,42 +389,20 @@
   }
   .hero-overlay {
     position: absolute; inset: 0;
-    background: linear-gradient(
-      to bottom,
-      rgba(26,10,14,0.1) 0%,
-      rgba(26,10,14,0.25) 50%,
-      rgba(26,10,14,0.6) 100%
-    );
+    background: linear-gradient(to bottom, rgba(26,10,14,0.1) 0%, rgba(26,10,14,0.25) 50%, rgba(26,10,14,0.6) 100%);
   }
-  .hero-content {
-    position: relative; z-index: 2;
-    text-align: center; color: #fff; padding: 2rem;
-  }
-  .hero-pre {
-    font-size: 0.75rem; letter-spacing: 0.3em;
-    text-transform: uppercase; font-weight: 200;
-    margin-bottom: 1.25rem; opacity: 0.8;
-  }
+  .hero-content { position: relative; z-index: 2; text-align: center; color: #fff; padding: 2rem; }
+  .hero-pre { font-size: 0.75rem; letter-spacing: 0.3em; text-transform: uppercase; font-weight: 200; margin-bottom: 1.25rem; opacity: 0.8; }
   .hero-names {
     font-family: 'Sloop', cursive;
     font-size: clamp(4rem, 13vw, 9.5rem);
-    font-weight: normal; line-height: 1;
-    margin-bottom: 1.5rem;
+    font-weight: normal; line-height: 1; margin-bottom: 1.5rem;
     text-shadow: 0 2px 24px rgba(0,0,0,0.2);
   }
   .hero-names .amp { font-size: 0.7em; opacity: 0.8; margin: 0 0.05em; }
-  .hero-date {
-    font-size: 0.9rem; letter-spacing: 0.35em;
-    font-weight: 200; margin-bottom: 0.5rem;
-  }
-  .hero-venue {
-    font-size: 0.75rem; letter-spacing: 0.18em;
-    text-transform: uppercase; opacity: 0.7; font-weight: 200;
-  }
-  .hero-scroll {
-    position: absolute; bottom: 2.5rem;
-    left: 50%; transform: translateX(-50%); z-index: 2;
-  }
+  .hero-date { font-size: 0.9rem; letter-spacing: 0.35em; font-weight: 200; margin-bottom: 0.5rem; }
+  .hero-venue { font-size: 0.75rem; letter-spacing: 0.18em; text-transform: uppercase; opacity: 0.7; font-weight: 200; }
+  .hero-scroll { position: absolute; bottom: 2.5rem; left: 50%; transform: translateX(-50%); z-index: 2; }
   .scroll-line {
     display: block; width: 1px; height: 55px;
     background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.5));
@@ -368,25 +410,29 @@
   }
   @keyframes scrollFade {
     0%, 100% { opacity: 0; transform: scaleY(0.1) translateY(-10px); }
-    60% { opacity: 1; transform: scaleY(1) translateY(0); }
+    60%       { opacity: 1; transform: scaleY(1)   translateY(0);     }
   }
 
-  /* VINYL */
+  /* ═══════════════════════════════════════════════════════
+     FUNDA + VINILO
+  ═══════════════════════════════════════════════════════ */
+
   .vinyl-sticky-container {
-    height: 300vh;
+    height: 210vh;
     position: relative;
-    /* el fondo del body (--cream) queda visible cuando el scene-bg desaparece */
   }
 
   .invitacion {
     position: sticky;
-    top: 42px; /* justo debajo del version nav */
+    top: 42px;
     height: calc(100vh - 42px);
-    display: flex; justify-content: center; align-items: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
     overflow: hidden;
-    padding: 0;
   }
 
+  /* Fondo oscuro (desaparece al final) */
   .vinyl-scene-bg {
     position: absolute; inset: 0;
     background: var(--dark);
@@ -395,34 +441,155 @@
     will-change: opacity;
   }
 
-  /* Marco circular del que "escapa" el disco */
-  .vinyl-box {
-    --box-alpha: 0.35;
-    position: relative; z-index: 1;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, var(--box-alpha));
-    padding: 2.5rem;
-    box-shadow:
-      0 0 0 8px rgba(255,255,255, calc(var(--box-alpha) * 0.15)),
-      0 0 60px rgba(255,255,255, calc(var(--box-alpha) * 0.05));
-    will-change: border-color, box-shadow;
+  /* ── FUNDA (sleeve-scene) ─────────────────────────────── */
+  /*
+    Tamaño: cuadrado, igual que el sobre.pdf.
+    Ligeramente más grande que el vinilo para contenerlo.
+  */
+  .sleeve-scene {
+    position: relative;
+    width:  clamp(320px, 76vw, 620px);
+    height: clamp(320px, 76vw, 620px);
+    flex-shrink: 0;
   }
 
-  /* Controla el scale — independiente de la rotación del disco */
-  .vinyl-escape-wrapper {
-    will-change: transform;
-    transform-origin: center center;
+  /* Cara posterior: simple, oscura, da profundidad */
+  .sleeve-back {
+    position: absolute; inset: 0;
+    background: #1C1613;
+    border-radius: 4px;
+    box-shadow:
+      0 40px 120px rgba(0,0,0,0.7),
+      0 0 0 1px rgba(255,255,255,0.06);
+    z-index: 1;
+    will-change: transform, opacity;
   }
+
+  /* ── PORTADA (sleeve-front) ───────────────────────────── */
+  /*
+    Diseño replicando el sobre.pdf:
+    - Lado derecho (~67%): foto de la pareja
+    - Lado izquierdo: espacio blanco con datos
+    - Esquina sup. derecha: nombres en script
+    - Esquina inf. izquierda: fecha y lugar
+    - Esquina inf. derecha: monograma
+  */
+  .sleeve-front {
+    position: absolute; inset: 0;
+    background: #FAFAF8;
+    border-radius: 4px;
+    overflow: hidden;
+    z-index: 3;
+    box-shadow:
+      0 40px 120px rgba(0,0,0,0.7),
+      0 0 0 1px rgba(0,0,0,0.07);
+    will-change: transform, opacity;
+  }
+
+  /* Foto (lado derecho, cubre ~67% de ancho, toda la altura) */
+  .sf-photo {
+    position: absolute;
+    top: 0; right: 0;
+    width: 67%; height: 100%;
+  }
+  .sf-photo img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    object-position: center 22%;
+    display: block;
+  }
+
+  /*
+    Sombra interior en el borde superior:
+    sugiere la ranura abierta de la funda por donde sale el vinilo.
+  */
+  .sf-top-shadow {
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 28px;
+    background: linear-gradient(to bottom, rgba(0,0,0,0.18), transparent);
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  /* Nombres en script (esquina sup. derecha, sobre la foto) */
+  .sf-script {
+    position: absolute;
+    top: 7%; right: 5%;
+    font-family: 'Sloop', cursive;
+    font-size: clamp(1.55rem, 4vw, 2.75rem);
+    color: #fff;
+    text-shadow: 0 2px 18px rgba(0,0,0,0.38);
+    line-height: 1;
+    z-index: 2;
+    text-align: right;
+  }
+  .sf-amp { font-size: 0.76em; opacity: 0.85; margin: 0 0.05em; }
+
+  /* Datos de la boda (esquina inf. izquierda, en espacio blanco) */
+  .sf-info {
+    position: absolute;
+    bottom: 7%; left: 5%;
+    z-index: 2;
+  }
+  .sf-date {
+    font-size: clamp(0.88rem, 2.3vw, 1.18rem);
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    color: var(--dark);
+    margin-bottom: 0.3rem;
+    line-height: 1.2;
+  }
+  .sf-venue {
+    font-size: clamp(0.55rem, 1.4vw, 0.72rem);
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--gray);
+    font-weight: 300;
+  }
+
+  /* Monograma (esquina inf. derecha, encima de la foto) */
+  .sf-mono {
+    position: absolute;
+    bottom: 5%; right: 5%;
+    width: clamp(26px, 4.2vw, 38px);
+    opacity: 0.55;
+    z-index: 2;
+    /* el logo positivo es negro → invertir para que sea blanco sobre la foto */
+    filter: invert(1) brightness(2);
+  }
+
+  /* ── VINILO ───────────────────────────────────────────── */
+  /*
+    Centrado dentro de sleeve-scene.
+    El JS actualiza el transform completo (incluye el offset de scroll).
+    Empieza a 52vh debajo del centro → overflow:hidden lo mantiene invisible
+    hasta que entra en el viewport y empieza a asomar por encima de la portada.
+  */
+  .vinyl-riser {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, calc(-50% - 9vh));
+    opacity: 0.35;
+    z-index: 2;
+    will-change: transform, opacity;
+  }
+
   .vinyl-record {
     position: relative;
-    width: clamp(300px, 72vw, 580px);
-    aspect-ratio: 1; border-radius: 50%;
+    width: clamp(290px, 70vw, 560px);
+    aspect-ratio: 1;
+    border-radius: 50%;
     background: radial-gradient(circle at 48% 48%, #2a2a2a, #111 40%, #080808 70%);
-    box-shadow: 0 0 0 2px #2a2a2a, inset 0 0 50px rgba(0,0,0,0.9), 0 24px 80px rgba(0,0,0,0.7);
+    box-shadow:
+      0 0 0 2px #2a2a2a,
+      inset 0 0 50px rgba(0,0,0,0.9),
+      0 24px 80px rgba(0,0,0,0.7);
     animation: spin 20s linear infinite;
     cursor: pointer;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
   .vinyl-grooves {
     position: absolute; inset: 7%; border-radius: 50%;
     background: repeating-radial-gradient(
@@ -431,6 +598,7 @@
       rgba(255,255,255,0.025) 5px, rgba(255,255,255,0.025) 6px
     );
   }
+
   .vinyl-label {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%,-50%);
@@ -445,9 +613,8 @@
     opacity: 0.15;
   }
   .vinyl-label-inner {
-    position: relative; text-align: center;
-    width: 80%;
-    font-size: clamp(0.58rem, 1.45vw, 0.82rem);
+    position: relative; text-align: center; width: 80%;
+    font-size: clamp(0.56rem, 1.4vw, 0.80rem);
     color: #111; line-height: 1.45;
     padding-top: 1.5rem;
   }
@@ -462,147 +629,86 @@
   }
 
   @media (max-width: 500px) {
-    .vinyl-label { width: 64%; }
-    .vinyl-label-inner {
-      width: 82%; padding-top: 0;
-      font-size: 0.6rem; line-height: 1.35;
-    }
+    .vinyl-label { width: 62%; }
+    .vinyl-label-inner { width: 82%; padding-top: 0; font-size: 0.58rem; line-height: 1.35; }
     .vinyl-label-inner p { margin-bottom: 0.2em; }
-    .vinyl-cta { margin-top: 0.35em !important; }
+    .vinyl-cta { margin-top: 0.3em !important; }
   }
 
-  /* REVEAL FADE-IN */
+  /* ═══════════════════════════════════════════════════════
+     SECCIONES INFERIORES
+  ═══════════════════════════════════════════════════════ */
+
   .reveal {
-    opacity: 0;
-    transform: translateY(22px);
+    opacity: 0; transform: translateY(22px);
     transition: opacity 0.75s ease, transform 0.75s ease;
   }
-
-  /* SECTION TITLE */
   .section-title {
     font-size: clamp(1.4rem, 3vw, 1.9rem);
     font-weight: 200; letter-spacing: 0.22em;
     text-transform: uppercase; color: var(--dark);
     text-align: center; margin-bottom: 1rem;
   }
-  .deco-line {
-    width: 50px; height: 1px;
-    background: var(--pink); margin: 0 auto 3.5rem;
-  }
+  .deco-line { width: 50px; height: 1px; background: var(--pink); margin: 0 auto 3.5rem; }
 
   /* DETALLES */
-  /* padding-top generoso: el vinilo flota sobre este fondo antes de que empiece el contenido */
   .detalles { background: var(--cream); padding: 8rem 2rem 5rem; }
-
   .detalles-grid {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
-    gap: 1.5rem;
-    max-width: 700px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr auto 1fr;
+    gap: 1.5rem; max-width: 700px; margin: 0 auto;
   }
-
   .det-lugar { grid-column: 1 / -1; }
-
   .det-card {
     background: #fff; border: 1px solid var(--border);
     border-radius: 3px; padding: 2rem 1.5rem; text-align: center;
     transition: box-shadow 0.3s, transform 0.3s;
   }
-  .det-card:hover {
-    box-shadow: 0 6px 30px rgba(122,59,80,0.1);
-    transform: translateY(-2px);
-  }
-  .det-card-center {
-    padding: 0; border: none; background: transparent; overflow: hidden;
-  }
+  .det-card:hover { box-shadow: 0 6px 30px rgba(122,59,80,0.1); transform: translateY(-2px); }
+  .det-card-center { padding: 0; border: none; background: transparent; overflow: hidden; }
   .det-photo-small {
     width: 120px; height: 100%; min-height: 140px;
-    border: 5px solid #fff;
-    box-shadow: 0 4px 20px rgba(26,10,14,0.14);
+    border: 5px solid #fff; box-shadow: 0 4px 20px rgba(26,10,14,0.14);
     transform: rotate(1.5deg); overflow: hidden; border-radius: 1px;
   }
-  .det-photo-small img {
-    width: 100%; height: 100%;
-    object-fit: cover; object-position: center 20%;
-  }
+  .det-photo-small img { width: 100%; height: 100%; object-fit: cover; object-position: center 20%; }
   .det-icon-wrap { display: flex; justify-content: center; margin-bottom: 1rem; }
   .det-icon-wrap svg { width: 24px; height: 24px; color: var(--pink); }
-  .det-card h3 {
-    font-size: 0.62rem; letter-spacing: 0.22em;
-    text-transform: uppercase; color: var(--gray);
-    font-weight: 400; margin-bottom: 0.6rem;
-  }
-  .det-main {
-    font-size: clamp(1rem, 2.5vw, 1.3rem);
-    color: var(--dark); font-weight: 300;
-    letter-spacing: 0.04em; line-height: 1.3; margin-bottom: 0.25rem;
-  }
+  .det-card h3 { font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gray); font-weight: 400; margin-bottom: 0.6rem; }
+  .det-main { font-size: clamp(1rem, 2.5vw, 1.3rem); color: var(--dark); font-weight: 300; letter-spacing: 0.04em; line-height: 1.3; margin-bottom: 0.25rem; }
   .det-sec { font-size: 0.75rem; color: var(--gray); font-weight: 200; letter-spacing: 0.06em; }
 
   /* MAPA */
   .mapa { background: var(--blush); padding: 5rem 5vw; }
-  .mapa-inner {
-    display: grid; grid-template-columns: 1fr 2fr;
-    gap: 3.5rem; max-width: 1100px; align-items: center;
-  }
-  .mapa-addr {
-    font-size: 0.88rem; color: var(--gray);
-    line-height: 1.9; margin-bottom: 2rem; font-weight: 200;
-  }
+  .mapa-inner { display: grid; grid-template-columns: 1fr 2fr; gap: 3.5rem; max-width: 1100px; align-items: center; }
+  .mapa-addr { font-size: 0.88rem; color: var(--gray); line-height: 1.9; margin-bottom: 2rem; font-weight: 200; }
   .mapa-btn {
-    display: inline-block; font-size: 0.72rem;
-    letter-spacing: 0.18em; text-transform: uppercase;
-    color: var(--rosewood); text-decoration: none; font-weight: 400;
-    border-bottom: 1px solid var(--rosewood); padding-bottom: 2px;
+    display: inline-block; font-size: 0.72rem; letter-spacing: 0.18em;
+    text-transform: uppercase; color: var(--rosewood); text-decoration: none;
+    font-weight: 400; border-bottom: 1px solid var(--rosewood); padding-bottom: 2px;
     transition: opacity 0.2s;
   }
   .mapa-btn:hover { opacity: 0.65; }
-  .mapa-embed {
-    border-radius: 3px; overflow: hidden; aspect-ratio: 4/3;
-    border: 6px solid #fff;
-    box-shadow: 0 8px 40px rgba(26,10,14,0.1);
-  }
+  .mapa-embed { border-radius: 3px; overflow: hidden; aspect-ratio: 4/3; border: 6px solid #fff; box-shadow: 0 8px 40px rgba(26,10,14,0.1); }
   .mapa-embed iframe { width: 100%; height: 100%; border: 0; display: block; }
 
   /* RSVP */
-  .rsvp {
-    background: var(--dark); padding: 7rem 2rem;
-    text-align: center; position: relative; overflow: hidden;
-  }
-  .rsvp-photo-bg {
-    position: absolute; inset: 0;
-    background: url('/foto.jpeg') center / cover;
-    opacity: 0.07; filter: grayscale(100%);
-  }
+  .rsvp { background: var(--dark); padding: 7rem 2rem; text-align: center; position: relative; overflow: hidden; }
+  .rsvp-photo-bg { position: absolute; inset: 0; background: url('/foto.jpeg') center / cover; opacity: 0.07; filter: grayscale(100%); }
   .rsvp-inner { position: relative; z-index: 1; max-width: 580px; margin: 0 auto; }
   .rsvp-monogram { width: 48px; filter: invert(1); opacity: 0.35; margin-bottom: 2rem; }
-  .rsvp-title {
-    font-size: clamp(1.5rem, 3.5vw, 2rem);
-    font-weight: 200; letter-spacing: 0.2em;
-    text-transform: uppercase; color: #fff; margin-bottom: 1rem;
-  }
-  .rsvp-dead {
-    font-size: 0.85rem; color: rgba(255,255,255,0.5);
-    margin-bottom: 3rem; font-weight: 200; letter-spacing: 0.06em;
-  }
+  .rsvp-title { font-size: clamp(1.5rem, 3.5vw, 2rem); font-weight: 200; letter-spacing: 0.2em; text-transform: uppercase; color: #fff; margin-bottom: 1rem; }
+  .rsvp-dead { font-size: 0.85rem; color: rgba(255,255,255,0.5); margin-bottom: 3rem; font-weight: 200; letter-spacing: 0.06em; }
   .rsvp-dead strong { color: var(--rose); font-weight: 300; }
   .rsvp-contacts { display: flex; gap: 1.5rem; justify-content: center; flex-wrap: wrap; }
   .rsvp-card {
-    display: flex; flex-direction: column; gap: 0.5rem;
-    text-decoration: none;
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
+    display: flex; flex-direction: column; gap: 0.5rem; text-decoration: none;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
     border-radius: 3px; padding: 1.75rem 2.5rem;
     transition: border-color 0.2s, background 0.2s;
   }
   .rsvp-card:hover { border-color: var(--rose); background: rgba(232,197,210,0.08); }
-  .rsvp-name {
-    font-size: 0.65rem; letter-spacing: 0.22em;
-    text-transform: uppercase; color: var(--rose); font-weight: 300;
-  }
-  .rsvp-phone {
-    font-size: 1.4rem; color: #fff; font-weight: 200; letter-spacing: 0.12em;
-  }
+  .rsvp-name { font-size: 0.65rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--rose); font-weight: 300; }
+  .rsvp-phone { font-size: 1.4rem; color: #fff; font-weight: 200; letter-spacing: 0.12em; }
 
   /* FOOTER */
   footer {
