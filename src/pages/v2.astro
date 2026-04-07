@@ -618,6 +618,11 @@
     background: var(--pink-label);
     display: flex; align-items: center; justify-content: center; overflow: hidden;
   }
+  .vinyl-label-inner,
+  .vinyl-label-inner * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
   .vinyl-label::before {
     content: '';
     position: absolute; inset: 0;
@@ -642,7 +647,7 @@
 
   @media (max-width: 500px) {
     .vinyl-label { width: 70%; }
-    .vinyl-label-inner { width: 74%; padding-top: 0; font-size: 0.75rem; line-height: 1.35; user-select: none;}
+    .vinyl-label-inner { width: 74%; padding-top: 0; font-size: 0.75rem; line-height: 1.35;}
     .vinyl-label-inner p { margin-bottom: 0.2em; }
     .vinyl-cta { margin-top: 0.3em !important; }
   }
