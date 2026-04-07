@@ -448,9 +448,15 @@
   */
   .sleeve-scene {
     position: relative;
-    width:  clamp(320px, 76vw, 620px);
-    height: clamp(320px, 76vw, 620px);
+    width:  clamp(320px, 95vw, 620px);
+    height: clamp(320px, 95vw, 620px);
     flex-shrink: 0;
+  }
+  @media (min-width: 600px) {
+    .sleeve-scene {
+      width: clamp(320px, 76vw, 620px);
+      height: clamp(320px, 76vw, 620px);
+    }
   }
 
   /* Cara posterior: simple, oscura, da profundidad */
@@ -577,7 +583,7 @@
 
   .vinyl-record {
     position: relative;
-    width: clamp(290px, 70vw, 560px);
+    width: clamp(290px, 90vw, 560px);
     aspect-ratio: 1;
     border-radius: 50%;
     background: radial-gradient(circle at 48% 48%, #2a2a2a, #111 40%, #080808 70%);
@@ -589,6 +595,12 @@
     cursor: pointer;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (min-width: 600px) {
+    .vinyl-record {
+      width: clamp(290px, 70vw, 560px);
+    }
+  }
 
   .vinyl-grooves {
     position: absolute; inset: 7%; border-radius: 50%;
@@ -629,8 +641,8 @@
   }
 
   @media (max-width: 500px) {
-    .vinyl-label { width: 62%; }
-    .vinyl-label-inner { width: 82%; padding-top: 0; font-size: 0.58rem; line-height: 1.35; }
+    .vinyl-label { width: 70%; }
+    .vinyl-label-inner { width: 82%; padding-top: 0; font-size: 0.75rem; line-height: 1.35; }
     .vinyl-label-inner p { margin-bottom: 0.2em; }
     .vinyl-cta { margin-top: 0.3em !important; }
   }
