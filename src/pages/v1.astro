@@ -156,6 +156,9 @@
 
         <div id="rfAsistentes" style="display:none"></div>
 
+        <!-- Campo oculto que Netlify detecta en build time; se rellena con JS antes de enviar -->
+        <textarea name="asistentes_detalle" id="asistentesDetalle" style="display:none"></textarea>
+
         <button type="submit" class="rf-submit">Confirmar</button>
       </form>
 
@@ -221,9 +224,22 @@
     if (personas < 20) { personas++; rfCount.textContent = String(personas); rfInput.value = String(personas); renderAttendees(); }
   });
 
-  // Submit: envía a Formspree (reemplaza la URL con tu endpoint real)
+  // Submit
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    // Serializar asistentes en el campo oculto que Netlify sí detecta
+    const detalleEl = document.getElementById('asistentesDetalle') as HTMLTextAreaElement;
+    if (personas > 0 && rfAsistentes.style.display !== 'none') {
+      const lines: string[] = [];
+      for (let i = 1; i <= personas; i++) {
+        const n = (form.querySelector(`[name="asistente_${i}_nombre"]`) as HTMLInputElement)?.value || '';
+        const a = (form.querySelector(`[name="asistente_${i}_alergias"]`) as HTMLInputElement)?.value || '';
+        lines.push(`${i}. ${n}${a ? ' — ' + a : ''}`);
+      }
+      detalleEl.value = lines.join('\n');
+    }
+
     const btn = form.querySelector('.rf-submit') as HTMLButtonElement;
     btn.disabled = true;
     btn.textContent = 'Enviando…';
