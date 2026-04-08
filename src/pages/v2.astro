@@ -224,6 +224,17 @@
     </div>
   </section>
 
+  <!-- FOTOS -->
+  <section class="fotos-preview reveal">
+    <div class="fp-inner">
+      <p class="fp-eyebrow">Galería</p>
+      <h2 class="fp-title">Las fotos del día</h2>
+      <div class="fp-deco"></div>
+      <p class="fp-text">Después de la boda encontraréis aquí todos los recuerdos del día.<br/>Y podréis subir las vuestras también.</p>
+      <a href="/galeria" class="fp-btn">Ver galería →</a>
+    </div>
+  </section>
+
   <footer>
     <p>Aimar & Deborah · 12 · 09 · 2026</p>
     <p class="footer-sub">deborahyaimar.com</p>
@@ -946,6 +957,34 @@
     font-size: 0.85rem; color: rgba(255,255,255,0.5);
     text-align: center; line-height: 1.8; font-weight: 200;
   }
+
+  /* FOTOS PREVIEW */
+  .fotos-preview {
+    background: var(--dark); padding: 7rem 1.5rem;
+    text-align: center;
+  }
+  .fp-inner { max-width: 520px; margin: 0 auto; }
+  .fp-eyebrow {
+    font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
+    color: var(--pink); font-weight: 400; margin-bottom: 1.2rem;
+  }
+  .fp-title {
+    font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 200;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: #fff; margin-bottom: 1.4rem;
+  }
+  .fp-deco { width: 40px; height: 1px; background: var(--pink); margin: 0 auto 2rem; }
+  .fp-text {
+    font-size: 0.9rem; font-weight: 300; line-height: 1.8;
+    color: rgba(255,255,255,0.5); margin-bottom: 2.5rem;
+  }
+  .fp-btn {
+    display: inline-block; font-size: 0.68rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: var(--pink);
+    border: 1px solid var(--pink); padding: 0.75rem 2rem;
+    text-decoration: none; transition: background 0.2s, color 0.2s;
+  }
+  .fp-btn:hover { background: var(--pink); color: var(--dark); }
 
   /* FOOTER */
   footer {

@@ -1,0 +1,212 @@
+---
+// Página privada para que los novios suban fotos por categoría.
+// No hay autenticación — la URL es el "secreto". Cambia /subir por algo
+// más difícil de adivinar si lo necesitas, ej: /panel-ad2026
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="/logo-positivo.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Subir fotos · A&D</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,200;0,300;0,400;0,500;1,200;1,300&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --pink: #F2B3CE;
+      --dark: #1a1a1a;
+      --border: rgba(255,255,255,0.1);
+    }
+    body {
+      background: #111; color: #fff;
+      font-family: 'Raleway', sans-serif;
+      font-weight: 300; font-size: 15px;
+      line-height: 1.6; letter-spacing: 0.03em;
+      -webkit-font-smoothing: antialiased;
+      min-height: 100vh; padding: 3rem 1.5rem;
+    }
+    .wrap { max-width: 620px; margin: 0 auto; }
+
+    .page-title {
+      font-size: 0.62rem; letter-spacing: 0.25em; text-transform: uppercase;
+      color: var(--pink); margin-bottom: 3rem;
+    }
+
+    .upload-block {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 4px; padding: 2rem; margin-bottom: 1rem;
+    }
+    .ub-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 1.5rem;
+    }
+    .ub-cat {
+      font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+      color: rgba(255,255,255,0.6);
+    }
+    .ub-badge {
+      font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+      background: rgba(242,179,206,0.12); color: var(--pink);
+      padding: 0.2rem 0.7rem; border-radius: 50px;
+    }
+    .ub-badge.done { background: rgba(100,220,150,0.12); color: #7de0a0; }
+
+    label.uf-label {
+      font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35); display: block; margin-bottom: 0.4rem;
+    }
+
+    /* Drop zone */
+    .uf-dropzone {
+      border: 1px dashed rgba(255,255,255,0.15);
+      border-radius: 2px; padding: 2rem 1.5rem;
+      text-align: center; cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative; margin-bottom: 1rem;
+    }
+    .uf-dropzone:hover, .uf-dropzone.drag-over {
+      border-color: var(--pink); background: rgba(242,179,206,0.04);
+    }
+    .uf-dropzone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+      width: 100%; height: 100%;
+    }
+    .uf-dz-text { font-size: 0.8rem; color: rgba(255,255,255,0.3); }
+    .uf-dz-count { font-size: 0.72rem; color: var(--pink); margin-top: 0.4rem; min-height: 1.1em; }
+
+    /* Preview thumbnails */
+    .uf-previews {
+      display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem;
+    }
+    .uf-thumb {
+      width: 64px; height: 64px; object-fit: cover;
+      border-radius: 2px; border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .uf-submit {
+      background: var(--pink); border: none; border-radius: 2px;
+      color: #111; font-family: inherit;
+      font-size: 0.68rem; letter-spacing: 0.2em;
+      text-transform: uppercase; font-weight: 400;
+      padding: 0.75rem 1.8rem; cursor: pointer;
+      transition: opacity 0.2s;
+    }
+    .uf-submit:hover { opacity: 0.85; }
+    .uf-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .ub-ok {
+      font-size: 0.75rem; color: #7de0a0; letter-spacing: 0.1em;
+      margin-top: 1rem; display: none;
+    }
+    .ub-err {
+      font-size: 0.75rem; color: #e07d7d; letter-spacing: 0.1em;
+      margin-top: 1rem; display: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <p class="page-title">Aimar & Deborah · Subir fotos</p>
+
+    {['Ceremonia', 'Cocktail', 'Comida', 'Baile', 'Momentos'].map(cat => (
+      <div class="upload-block" id={`block-${cat.toLowerCase()}`}>
+        <div class="ub-head">
+          <span class="ub-cat">{cat}</span>
+          <span class="ub-badge" id={`badge-${cat.toLowerCase()}`}>Pendiente</span>
+        </div>
+
+        <form
+          name={`fotos-${cat.toLowerCase()}`}
+          method="POST"
+          data-netlify="true"
+          enctype="multipart/form-data"
+          class="ub-form"
+          data-cat={cat.toLowerCase()}
+        >
+          <input type="hidden" name="form-name" value={`fotos-${cat.toLowerCase()}`} />
+          <input type="hidden" name="categoria" value={cat} />
+
+          <label class="uf-label">Selecciona las fotos</label>
+          <div class="uf-dropzone">
+            <input type="file" name="fotos" accept="image/*" multiple />
+            <p class="uf-dz-text">Arrastra o toca para seleccionar</p>
+            <p class="uf-dz-count"></p>
+          </div>
+
+          <div class="uf-previews"></div>
+
+          <button type="submit" class="uf-submit">Subir {cat}</button>
+        </form>
+
+        <p class="ub-ok" id={`ok-${cat.toLowerCase()}`}>✓ Subido correctamente</p>
+        <p class="ub-err" id={`err-${cat.toLowerCase()}`}>Error al subir. Inténtalo de nuevo.</p>
+      </div>
+    ))}
+  </div>
+
+<script>
+  document.querySelectorAll('.ub-form').forEach((form) => {
+    const f       = form as HTMLFormElement;
+    const cat     = f.dataset.cat!;
+    const input   = f.querySelector('input[type="file"]') as HTMLInputElement;
+    const dz      = f.querySelector('.uf-dropzone') as HTMLElement;
+    const count   = f.querySelector('.uf-dz-count') as HTMLElement;
+    const previews = f.querySelector('.uf-previews') as HTMLElement;
+    const btn     = f.querySelector('.uf-submit') as HTMLButtonElement;
+    const badge   = document.getElementById(`badge-${cat}`)!;
+    const okEl    = document.getElementById(`ok-${cat}`)!;
+    const errEl   = document.getElementById(`err-${cat}`)!;
+
+    function updatePreview() {
+      previews.innerHTML = '';
+      const files = Array.from(input.files ?? []);
+      count.textContent = files.length > 0 ? `${files.length} foto${files.length > 1 ? 's' : ''} seleccionada${files.length > 1 ? 's' : ''}` : '';
+      files.forEach(file => {
+        const img = document.createElement('img');
+        img.className = 'uf-thumb';
+        img.src = URL.createObjectURL(file);
+        previews.appendChild(img);
+      });
+    }
+
+    input.addEventListener('change', updatePreview);
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault(); dz.classList.remove('drag-over');
+      if ((e as DragEvent).dataTransfer?.files) {
+        input.files = (e as DragEvent).dataTransfer!.files;
+        updatePreview();
+      }
+    });
+
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      btn.disabled = true; btn.textContent = 'Subiendo…';
+      okEl.style.display = 'none'; errEl.style.display = 'none';
+      try {
+        const res = await fetch('/', { method: 'POST', body: new FormData(f) });
+        if (res.ok) {
+          btn.textContent = 'Subido';
+          badge.textContent = 'Subido';
+          badge.classList.add('done');
+          okEl.style.display = 'block';
+        } else {
+          throw new Error();
+        }
+      } catch {
+        btn.disabled = false;
+        btn.textContent = `Subir ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
+        errEl.style.display = 'block';
+      }
+    });
+  });
+</script>
+
+</body>
+</html>
