@@ -145,7 +145,7 @@
         </div>
 
         <div class="rf-field" id="rfPersonas" style="display:none">
-          <label for="personas">¿Cuántos venís?</label>
+          <label>¿Cuántos venís?</label>
           <div class="rf-counter">
             <button type="button" class="rf-count-btn" id="rfMinus">−</button>
             <span id="rfCount">1</span>
@@ -154,10 +154,7 @@
           </div>
         </div>
 
-        <div class="rf-field" id="rfAlergias" style="display:none">
-          <label for="alergias">Alergias o intolerancias</label>
-          <textarea id="alergias" name="alergias" rows="3" placeholder="Si no hay ninguna, déjalo en blanco"></textarea>
-        </div>
+        <div id="rfAsistentes" style="display:none"></div>
 
         <button type="submit" class="rf-submit">Confirmar</button>
       </form>
@@ -178,15 +175,32 @@
 
 <script>
   // ── RSVP FORM ─────────────────────────────────────────────────
-  const form        = document.getElementById('rsvpForm')    as HTMLFormElement;
-  const rfPersonas  = document.getElementById('rfPersonas')  as HTMLElement;
-  const rfAlergias  = document.getElementById('rfAlergias')  as HTMLElement;
-  const rfMinus     = document.getElementById('rfMinus')     as HTMLButtonElement;
-  const rfPlus      = document.getElementById('rfPlus')      as HTMLButtonElement;
-  const rfCount     = document.getElementById('rfCount')     as HTMLElement;
-  const rfInput     = document.getElementById('rfPersonasInput') as HTMLInputElement;
-  const rsvpOk      = document.getElementById('rsvpOk')     as HTMLElement;
+  const form           = document.getElementById('rsvpForm')       as HTMLFormElement;
+  const rfPersonas     = document.getElementById('rfPersonas')     as HTMLElement;
+  const rfAsistentes   = document.getElementById('rfAsistentes')   as HTMLElement;
+  const rfMinus        = document.getElementById('rfMinus')        as HTMLButtonElement;
+  const rfPlus         = document.getElementById('rfPlus')         as HTMLButtonElement;
+  const rfCount        = document.getElementById('rfCount')        as HTMLElement;
+  const rfInput        = document.getElementById('rfPersonasInput') as HTMLInputElement;
+  const rsvpOk         = document.getElementById('rsvpOk')        as HTMLElement;
+  const nombreInput    = document.getElementById('nombre')         as HTMLInputElement;
   let personas = 1;
+
+  function renderAttendees() {
+    rfAsistentes.innerHTML = '';
+    for (let i = 1; i <= personas; i++) {
+      const row = document.createElement('div');
+      row.className = 'rf-attendee';
+      const prefill = i === 1 ? (nombreInput.value || '') : '';
+      row.innerHTML = `
+        <p class="rf-attendee-label">Asistente ${i}</p>
+        <div class="rf-field rf-attendee-fields">
+          <input type="text" name="asistente_${i}_nombre" placeholder="Nombre" value="${prefill.replace(/"/g,'&quot;')}" />
+          <input type="text" name="asistente_${i}_alergias" placeholder="Alergias (o vacío si ninguna)" />
+        </div>`;
+      rfAsistentes.appendChild(row);
+    }
+  }
 
   // Mostrar / ocultar campos según asistencia
   form.querySelectorAll('input[name="asistencia"]').forEach(radio => {
@@ -194,16 +208,17 @@
       const val = (form.querySelector('input[name="asistencia"]:checked') as HTMLInputElement)?.value;
       const asiste = val === 'si';
       rfPersonas.style.display = asiste ? 'flex' : 'none';
-      rfAlergias.style.display = asiste ? 'flex' : 'none';
+      rfAsistentes.style.display = asiste ? 'flex' : 'none';
+      if (asiste) renderAttendees();
     });
   });
 
   // Counter +/-
   rfMinus.addEventListener('click', () => {
-    if (personas > 1) { personas--; rfCount.textContent = String(personas); rfInput.value = String(personas); }
+    if (personas > 1) { personas--; rfCount.textContent = String(personas); rfInput.value = String(personas); renderAttendees(); }
   });
   rfPlus.addEventListener('click', () => {
-    if (personas < 20) { personas++; rfCount.textContent = String(personas); rfInput.value = String(personas); }
+    if (personas < 20) { personas++; rfCount.textContent = String(personas); rfInput.value = String(personas); renderAttendees(); }
   });
 
   // Submit: envía a Formspree (reemplaza la URL con tu endpoint real)
@@ -731,6 +746,31 @@
     letter-spacing: 0.08em; color: #fff;
     min-width: 1.5rem; text-align: center;
   }
+
+  /* Attendee rows */
+  #rfAsistentes {
+    flex-direction: column; gap: 1rem;
+  }
+  .rf-attendee { display: flex; flex-direction: column; gap: 0.5rem; }
+  .rf-attendee-label {
+    font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--pink); font-weight: 400;
+  }
+  .rf-attendee-fields {
+    display: flex; flex-direction: column; gap: 0.5rem;
+  }
+  .rf-attendee-fields input {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 2px; color: #fff;
+    font-family: inherit; font-size: 0.85rem; font-weight: 300;
+    padding: 0.65rem 0.9rem; width: 100%;
+    transition: border-color 0.2s;
+  }
+  .rf-attendee-fields input:focus {
+    outline: none; border-color: var(--pink);
+  }
+  .rf-attendee-fields input::placeholder { color: rgba(255,255,255,0.3); }
 
   .rf-submit {
     margin-top: 0.4rem;
