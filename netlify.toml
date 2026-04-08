@@ -6,7 +6,7 @@
   # en el bundle del cliente para que el navegador suba fotos a Cloudinary).
   # El cloud name y el upload preset no son secretos — es el diseño de la API.
   [build.environment]
-    SECRETS_SCAN_OMIT_KEYS = "PUBLIC_CLOUDINARY_CLOUD_NAME,PUBLIC_CLOUDINARY_PRESET"
+    SECRETS_SCAN_OMIT_KEYS = "PUBLIC_CLOUDINARY_CLOUD_NAME,PUBLIC_CLOUDINARY_PRESET,CLOUDINARY_CLOUD_NAME"
 
 [functions]
   directory = "netlify/functions"
