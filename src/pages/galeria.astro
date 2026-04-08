@@ -1,8 +1,4 @@
 ---
-// Variables de entorno públicas (se incrustan en el bundle del cliente).
-// Añádelas en Netlify → Site configuration → Environment variables:
-//   PUBLIC_CLOUDINARY_CLOUD_NAME   → tu cloud name (ej. "dxyz1234")
-//   PUBLIC_CLOUDINARY_PRESET       → nombre del upload preset sin firma (ej. "wedding_invitados")
 const cloudName = import.meta.env.PUBLIC_CLOUDINARY_CLOUD_NAME ?? '';
 const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
 ---
@@ -40,47 +36,64 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     nav {
       position: sticky; top: 0; z-index: 100;
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0 2rem; height: 56px;
+      padding: 0 1.5rem; height: 56px;
       background: rgba(250,248,244,0.92); backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
     }
-    .nav-logo { height: 28px; }
+    .nav-logo { height: 26px; }
     .nav-back {
-      font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase;
+      font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase;
       color: var(--gray); text-decoration: none; transition: color 0.2s;
     }
     .nav-back:hover { color: var(--dark); }
+    .nav-upload-btn {
+      font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--dark); background: none;
+      border: 1px solid var(--border); border-radius: 2px;
+      padding: 0.45rem 1rem; cursor: pointer;
+      font-family: inherit; transition: border-color 0.2s, color 0.2s;
+      text-decoration: none; display: flex; align-items: center; gap: 0.4rem;
+    }
+    .nav-upload-btn:hover { border-color: var(--pink); color: var(--pink); }
+    .nav-upload-btn svg { width: 13px; height: 13px; }
 
     /* HEADER */
-    .gl-header { text-align: center; padding: 5rem 1.5rem 3rem; }
+    .gl-header { text-align: center; padding: 4rem 1.5rem 2.5rem; }
     .gl-eyebrow {
       font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--pink); margin-bottom: 1.2rem;
+      color: var(--pink); margin-bottom: 1rem;
     }
     .gl-title {
       font-family: 'Sloop', cursive;
       font-size: clamp(2.8rem, 7vw, 4.5rem);
       font-weight: normal; color: var(--dark);
-      line-height: 1.1; margin-bottom: 1rem;
+      line-height: 1.1; margin-bottom: 0.8rem;
     }
     .gl-sub { font-size: 0.82rem; color: var(--gray); letter-spacing: 0.1em; }
 
-    /* ── GALERÍA OFICIAL ──────────────────────────────────────── */
+    /* TABS */
     .gl-tabs {
       display: flex; justify-content: center; flex-wrap: wrap;
       border-bottom: 1px solid var(--border); padding: 0 1.5rem;
+      position: sticky; top: 56px; z-index: 90;
+      background: rgba(250,248,244,0.95); backdrop-filter: blur(10px);
     }
     .gl-tab {
-      font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
-      color: var(--gray); padding: 1rem 1.4rem;
+      font-size: 0.63rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--gray); padding: 0.9rem 1.2rem;
       cursor: pointer; border: none; background: none;
       border-bottom: 2px solid transparent; margin-bottom: -1px;
       transition: color 0.2s, border-color 0.2s; font-family: inherit;
     }
     .gl-tab:hover { color: var(--dark); }
     .gl-tab.active { color: var(--dark); border-bottom-color: var(--pink); }
+    .gl-tab[data-cat="invitados"].active { border-bottom-color: var(--rose); color: var(--gray); }
+    .gl-tab[data-cat="invitados"] { color: var(--pink); }
 
-    .gl-grid-wrap { padding: 3rem 1.5rem 5rem; max-width: 1100px; margin: 0 auto; }
+    /* GRID */
+    .gl-grid-wrap { padding: 3rem 1.5rem 5rem; max-width: 1200px; margin: 0 auto; }
+
+    /* Modo cuadrícula (fotos oficiales) */
     .gl-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -90,12 +103,39 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     .gl-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
     .gl-item:hover img { transform: scale(1.04); }
 
+    /* Modo masonry (fotos invitados) */
+    .gl-grid.masonry {
+      display: block;
+      columns: 2; column-gap: 4px;
+    }
+    @media (min-width: 500px)  { .gl-grid.masonry { columns: 3; } }
+    @media (min-width: 750px)  { .gl-grid.masonry { columns: 4; } }
+    @media (min-width: 1000px) { .gl-grid.masonry { columns: 5; } }
+
+    .inv-item {
+      break-inside: avoid; margin-bottom: 4px;
+      position: relative; cursor: pointer; overflow: hidden;
+      background: var(--rose);
+      animation: fadeIn 0.35s ease both;
+    }
+    .inv-item img { width: 100%; display: block; transition: transform 0.4s; }
+    .inv-item:hover img { transform: scale(1.04); }
+    .inv-item-name {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      padding: 0.5rem 0.7rem;
+      background: linear-gradient(transparent, rgba(15,5,5,0.6));
+      font-size: 0.68rem; letter-spacing: 0.06em; color: #fff;
+      opacity: 0; transition: opacity 0.25s;
+    }
+    .inv-item:hover .inv-item-name { opacity: 1; }
+
+    /* Estado vacío */
     .gl-empty {
       grid-column: 1 / -1;
       display: flex; flex-direction: column; align-items: center;
       justify-content: center; padding: 6rem 2rem; text-align: center;
     }
-    .gl-empty-icon { width: 56px; height: 56px; margin-bottom: 2rem; color: var(--rose); }
+    .gl-empty-icon { width: 52px; height: 52px; margin-bottom: 2rem; color: var(--rose); }
     .gl-empty-title {
       font-size: 1rem; font-weight: 300; letter-spacing: 0.12em;
       text-transform: uppercase; color: var(--dark); margin-bottom: 0.8rem;
@@ -106,72 +146,34 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase;
       color: var(--pink); border: 1px solid var(--rose); padding: 0.4rem 1.2rem; border-radius: 50px;
     }
+    /* Para masonry el empty ocupa todo el ancho */
+    .gl-grid.masonry .gl-empty { column-span: all; display: flex; }
 
-    /* ── SECCIÓN INVITADOS ───────────────────────────────────── */
-    .inv-section { background: var(--blush); padding: 6rem 1.5rem; }
-    .inv-inner { max-width: 1100px; margin: 0 auto; }
-
-    .inv-header { text-align: center; margin-bottom: 3.5rem; }
-    .inv-eyebrow {
-      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--pink); margin-bottom: 1rem;
-    }
-    .inv-title {
-      font-size: clamp(1.5rem, 3.5vw, 2rem); font-weight: 200;
-      letter-spacing: 0.18em; text-transform: uppercase; color: var(--dark);
-      margin-bottom: 0.6rem;
-    }
-    .inv-sub { font-size: 0.82rem; color: var(--gray); }
-
-    /* Grid de fotos invitados */
-    .inv-grid {
-      columns: 2; column-gap: 6px;
-    }
-    @media (min-width: 600px)  { .inv-grid { columns: 3; } }
-    @media (min-width: 900px)  { .inv-grid { columns: 4; } }
-    @media (min-width: 1200px) { .inv-grid { columns: 5; } }
-
-    .inv-item {
-      break-inside: avoid; margin-bottom: 6px;
-      position: relative; cursor: pointer; overflow: hidden;
-      background: var(--rose);
-    }
-    .inv-item img {
-      width: 100%; display: block;
-      transition: transform 0.4s ease;
-    }
-    .inv-item:hover img { transform: scale(1.04); }
-    .inv-item-name {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      padding: 0.5rem 0.7rem;
-      background: linear-gradient(transparent, rgba(20,10,10,0.55));
-      font-size: 0.68rem; letter-spacing: 0.08em; color: #fff;
-      opacity: 0; transition: opacity 0.3s;
-    }
-    .inv-item:hover .inv-item-name { opacity: 1; }
-
-    .inv-empty {
-      text-align: center; padding: 4rem 2rem;
-      font-size: 0.85rem; color: var(--gray); letter-spacing: 0.06em;
-    }
-    .inv-loading {
-      text-align: center; padding: 3rem;
-      font-size: 0.72rem; letter-spacing: 0.15em; text-transform: uppercase;
-      color: var(--gray);
-    }
+    /* Refresh bar (invitados) */
     .inv-refresh {
-      text-align: center; margin-top: 2rem;
-      font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
-      color: var(--gray); opacity: 0.6;
+      text-align: center; margin-top: 1.5rem;
+      font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--gray); opacity: 0.6; display: none;
     }
     .inv-refresh span { color: var(--pink); }
 
-    /* Upload form */
-    .inv-upload { max-width: 480px; margin: 3.5rem auto 0; }
-    .inv-upload-title {
-      text-align: center; font-size: 0.72rem; letter-spacing: 0.2em;
-      text-transform: uppercase; color: var(--dark); margin-bottom: 1.5rem;
+    /* ── UPLOAD SECTION ──────────────────────────────────────────── */
+    .upload-section {
+      background: var(--blush);
+      border-top: 1px solid var(--border);
+      padding: 5rem 1.5rem;
     }
+    .upload-inner { max-width: 480px; margin: 0 auto; }
+    .upload-header { text-align: center; margin-bottom: 2.5rem; }
+    .upload-eyebrow {
+      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
+      color: var(--pink); margin-bottom: 0.8rem;
+    }
+    .upload-title {
+      font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 200;
+      letter-spacing: 0.18em; text-transform: uppercase; color: var(--dark);
+    }
+
     .uf-label {
       font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
       color: var(--gray); display: block; margin-bottom: 0.4rem;
@@ -184,7 +186,6 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     }
     .uf-input:focus { outline: none; border-color: var(--pink); }
     .uf-input::placeholder { color: rgba(26,26,26,0.3); }
-
     .uf-dropzone {
       border: 1px dashed var(--border); border-radius: 2px;
       padding: 2rem 1.5rem; text-align: center; cursor: pointer;
@@ -200,34 +201,26 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     .uf-dz-icon { color: var(--pink); margin-bottom: 0.7rem; }
     .uf-dz-text { font-size: 0.82rem; color: var(--gray); line-height: 1.6; }
     .uf-dz-count { font-size: 0.72rem; color: var(--pink); margin-top: 0.4rem; min-height: 1.1em; }
-
-    /* Progress bar */
     .uf-progress-wrap {
       display: none; background: var(--border); border-radius: 2px;
       height: 3px; margin-bottom: 1rem; overflow: hidden;
     }
-    .uf-progress-bar {
-      height: 100%; background: var(--pink);
-      width: 0; transition: width 0.2s;
-    }
-
+    .uf-progress-bar { height: 100%; background: var(--pink); width: 0; transition: width 0.15s; }
     .uf-submit {
       width: 100%; background: var(--dark); border: none; border-radius: 2px;
       color: #fff; font-family: inherit;
       font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
-      font-weight: 400; padding: 0.9rem 2rem; cursor: pointer;
-      transition: opacity 0.2s;
+      font-weight: 400; padding: 0.9rem 2rem; cursor: pointer; transition: opacity 0.2s;
     }
     .uf-submit:hover { opacity: 0.8; }
     .uf-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    .inv-upload-ok {
-      display: none; text-align: center; padding: 1.5rem 0;
+    .upload-ok {
+      display: none; text-align: center; padding: 2rem 0;
     }
-    .inv-upload-ok p { font-size: 0.85rem; color: var(--dark); letter-spacing: 0.06em; }
-    .inv-upload-ok .ok-sub { color: var(--gray); font-size: 0.75rem; margin-top: 0.4rem; }
-    .inv-upload-again {
-      display: inline-block; margin-top: 1rem;
+    .upload-ok p { font-size: 0.88rem; color: var(--dark); letter-spacing: 0.06em; }
+    .upload-ok .ok-sub { color: var(--gray); font-size: 0.75rem; margin-top: 0.4rem; }
+    .upload-again {
+      display: inline-block; margin-top: 1.2rem;
       font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase;
       color: var(--pink); cursor: pointer; border-bottom: 1px solid var(--rose);
     }
@@ -235,7 +228,7 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     /* Lightbox */
     .lightbox {
       display: none; position: fixed; inset: 0; z-index: 1000;
-      background: rgba(15,5,5,0.95);
+      background: rgba(12,4,4,0.96);
       align-items: center; justify-content: center;
     }
     .lightbox.open { display: flex; }
@@ -243,29 +236,25 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     .lb-close {
       position: absolute; top: 1.2rem; right: 1.5rem;
       font-size: 1.4rem; color: #fff; cursor: pointer;
-      background: none; border: none; opacity: 0.55; transition: opacity 0.2s;
+      background: none; border: none; opacity: 0.5; transition: opacity 0.2s;
     }
     .lb-close:hover { opacity: 1; }
     .lb-prev, .lb-next {
       position: absolute; top: 50%; transform: translateY(-50%);
       background: none; border: none; color: #fff; font-size: 2rem;
-      cursor: pointer; opacity: 0.4; padding: 1rem; transition: opacity 0.2s;
+      cursor: pointer; opacity: 0.35; padding: 1rem; transition: opacity 0.2s;
     }
     .lb-prev:hover, .lb-next:hover { opacity: 1; }
-    .lb-prev { left: 0.5rem; }
-    .lb-next { right: 0.5rem; }
+    .lb-prev { left: 0.2rem; } .lb-next { right: 0.2rem; }
 
     /* Footer */
     footer {
-      background: var(--dark); border-top: 1px solid rgba(255,255,255,0.05);
-      text-align: center; padding: 2rem 1.5rem;
+      background: var(--dark); text-align: center; padding: 2rem 1.5rem;
       color: rgba(255,255,255,0.25); font-size: 0.72rem; letter-spacing: 0.1em;
     }
     .footer-sub { margin-top: 0.2rem; font-size: 0.62rem; opacity: 0.5; }
 
-    /* Entrada de fotos */
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-    .inv-item { animation: fadeIn 0.4s ease both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
   </style>
 </head>
 <body>
@@ -273,7 +262,14 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
   <nav>
     <a href="javascript:history.back()" class="nav-back">← volver</a>
     <img src="/logo-positivo.png" alt="A&D" class="nav-logo" />
-    <span style="width:5rem"></span>
+    <a href="#subir" class="nav-upload-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      Subir fotos
+    </a>
   </nav>
 
   <!-- HEADER -->
@@ -283,7 +279,7 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     <p class="gl-sub">Aimar & Deborah · Palacio de Murguia</p>
   </div>
 
-  <!-- TABS GALERÍA OFICIAL -->
+  <!-- TABS -->
   <div class="gl-tabs" role="tablist">
     <button class="gl-tab active" data-cat="todas">Todas</button>
     <button class="gl-tab" data-cat="ceremonia">Ceremonia</button>
@@ -291,9 +287,10 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     <button class="gl-tab" data-cat="comida">Comida</button>
     <button class="gl-tab" data-cat="baile">Baile</button>
     <button class="gl-tab" data-cat="momentos">Momentos</button>
+    <button class="gl-tab" data-cat="invitados">Invitados</button>
   </div>
 
-  <!-- GALERÍA OFICIAL -->
+  <!-- GRID -->
   <div class="gl-grid-wrap">
     <div class="gl-grid" id="glGrid">
       <div class="gl-empty" id="glEmpty">
@@ -302,14 +299,17 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
           <circle cx="8.5" cy="8.5" r="1.5"/>
           <path d="M21 15l-5-5L5 21"/>
         </svg>
-        <p class="gl-empty-title">Las fotos llegarán pronto</p>
-        <p class="gl-empty-sub">Después de la boda colgaremos aquí todos los recuerdos del día. Vuelve a partir del 13 de septiembre.</p>
-        <span class="gl-date-badge">12 · 09 · 2026</span>
+        <p class="gl-empty-title" id="glEmptyTitle">Las fotos llegarán pronto</p>
+        <p class="gl-empty-sub" id="glEmptySub">Después de la boda colgaremos aquí todos los recuerdos del día. Vuelve a partir del 13 de septiembre.</p>
+        <span class="gl-date-badge" id="glEmptyBadge">12 · 09 · 2026</span>
       </div>
     </div>
+    <p class="inv-refresh" id="invRefresh">
+      Se actualiza cada 30 s · hace <span id="invTimer">0</span>s
+    </p>
   </div>
 
-  <!-- LIGHTBOX GALERÍA OFICIAL -->
+  <!-- LIGHTBOX -->
   <div class="lightbox" id="lightbox">
     <button class="lb-close" id="lbClose">✕</button>
     <button class="lb-prev" id="lbPrev">‹</button>
@@ -317,68 +317,44 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     <button class="lb-next" id="lbNext">›</button>
   </div>
 
-  <!-- ── FOTOS DE LOS INVITADOS ─────────────────────────────── -->
-  <section class="inv-section">
-    <div class="inv-inner">
-
-      <div class="inv-header">
-        <p class="inv-eyebrow">El día de la boda</p>
-        <h2 class="inv-title">Vuestras fotos</h2>
-        <p class="inv-sub">Comparte los momentos que hayas capturado</p>
+  <!-- ── SUBIR FOTOS ────────────────────────────────────────────── -->
+  <section class="upload-section" id="subir">
+    <div class="upload-inner">
+      <div class="upload-header">
+        <p class="upload-eyebrow">Comparte tus fotos</p>
+        <h2 class="upload-title">Sube las tuyas</h2>
       </div>
 
-      <!-- Grid de fotos en tiempo real -->
-      <div class="inv-grid" id="invGrid">
-        <div class="inv-loading" id="invLoading">Cargando…</div>
-      </div>
-      <p class="inv-refresh" id="invRefresh" style="display:none">
-        Se actualiza cada 30 segundos · última vez hace <span id="invTimer">0</span>s
-      </p>
+      <form id="uploadForm">
+        <label class="uf-label" for="ufNombre">Tu nombre</label>
+        <input class="uf-input" type="text" id="ufNombre" placeholder="Aimar & Deborah" required />
 
-      <!-- Lightbox invitados -->
-      <div class="lightbox" id="invLightbox">
-        <button class="lb-close" id="invLbClose">✕</button>
-        <button class="lb-prev" id="invLbPrev">‹</button>
-        <img id="invLbImg" src="" alt="" />
-        <button class="lb-next" id="invLbNext">›</button>
-      </div>
-
-      <!-- Formulario subida -->
-      <div class="inv-upload">
-        <p class="inv-upload-title">Sube las tuyas</p>
-
-        <form id="invUploadForm">
-          <label class="uf-label" for="invNombre">Tu nombre</label>
-          <input class="uf-input" type="text" id="invNombre" placeholder="María García" required />
-
-          <label class="uf-label">Fotos</label>
-          <div class="uf-dropzone" id="invDropzone">
-            <input type="file" id="invFileInput" accept="image/*" multiple />
-            <div class="uf-dz-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <p class="uf-dz-text">Arrastra aquí o toca para seleccionar</p>
-            <p class="uf-dz-count" id="invFileCount"></p>
+        <label class="uf-label">Fotos</label>
+        <div class="uf-dropzone" id="ufDropzone">
+          <input type="file" id="ufFileInput" accept="image/*" multiple />
+          <div class="uf-dz-icon">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
           </div>
-
-          <div class="uf-progress-wrap" id="invProgressWrap">
-            <div class="uf-progress-bar" id="invProgressBar"></div>
-          </div>
-
-          <button type="submit" class="uf-submit" id="invSubmitBtn">Subir fotos</button>
-        </form>
-
-        <div class="inv-upload-ok" id="invUploadOk">
-          <p>¡Gracias por compartir!</p>
-          <p class="ok-sub">Tus fotos ya están en la galería.</p>
-          <span class="inv-upload-again" id="invUploadAgain">Subir más fotos</span>
+          <p class="uf-dz-text">Arrastra aquí o toca para seleccionar</p>
+          <p class="uf-dz-count" id="ufFileCount"></p>
         </div>
-      </div>
 
+        <div class="uf-progress-wrap" id="ufProgressWrap">
+          <div class="uf-progress-bar" id="ufProgressBar"></div>
+        </div>
+
+        <button type="submit" class="uf-submit" id="ufSubmitBtn">Subir fotos</button>
+      </form>
+
+      <div class="upload-ok" id="uploadOk">
+        <p>¡Gracias por compartir!</p>
+        <p class="ok-sub">Tus fotos ya aparecen en la pestaña Invitados.</p>
+        <span class="upload-again" id="uploadAgain">Subir más fotos</span>
+      </div>
     </div>
   </section>
 
@@ -388,35 +364,103 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
   </footer>
 
 <script define:vars={{ cloudName, preset }} is:inline>
-  // ── GALERÍA OFICIAL (fotos de los novios) ─────────────────────
-  const FOTOS = [];  // Rellenar después de la boda:
-  // { src: '/fotos/foto1.jpg', cat: 'ceremonia', alt: 'descripción' }
+  // ── DATOS GALERÍA OFICIAL ──────────────────────────────────────
+  // Rellenar después de la boda:
+  // { src: '/fotos/foto.jpg', full: '/fotos/foto.jpg', cat: 'ceremonia', alt: '' }
+  const FOTOS = [];
 
-  const glGrid   = document.getElementById('glGrid');
-  const glEmpty  = document.getElementById('glEmpty');
-  const lightbox = document.getElementById('lightbox');
-  const lbImg    = document.getElementById('lbImg');
-  const lbClose  = document.getElementById('lbClose');
-  const lbPrev   = document.getElementById('lbPrev');
-  const lbNext   = document.getElementById('lbNext');
-  let glCat = 'todas';
-  let glIdx = 0;
+  // ── ESTADO ────────────────────────────────────────────────────
+  let glCat    = 'todas';
+  let invFotos = [];
+  let secondsSince = 0;
 
-  function glFiltered() {
-    return glCat === 'todas' ? FOTOS : FOTOS.filter(f => f.cat === glCat);
+  const glGrid      = document.getElementById('glGrid');
+  const glEmpty     = document.getElementById('glEmpty');
+  const glEmptyTitle = document.getElementById('glEmptyTitle');
+  const glEmptySub  = document.getElementById('glEmptySub');
+  const glEmptyBadge = document.getElementById('glEmptyBadge');
+  const invRefresh  = document.getElementById('invRefresh');
+  const invTimer    = document.getElementById('invTimer');
+  const lightbox    = document.getElementById('lightbox');
+  const lbImg       = document.getElementById('lbImg');
+
+  // ── LIGHTBOX ──────────────────────────────────────────────────
+  function openLb(idx, getItems) {
+    lightbox._idx = idx; lightbox._getItems = getItems;
+    lbImg.src = (getItems()[idx].full ?? getItems()[idx].src ?? getItems()[idx].thumb);
+    lightbox.classList.add('open');
+    document.body.style.overflow = 'hidden';
   }
+  function closeLb() { lightbox.classList.remove('open'); document.body.style.overflow = ''; }
+  function stepLb(dir) {
+    const items = lightbox._getItems();
+    lightbox._idx = (lightbox._idx + dir + items.length) % items.length;
+    lbImg.src = (items[lightbox._idx].full ?? items[lightbox._idx].src ?? items[lightbox._idx].thumb);
+  }
+  document.getElementById('lbClose').addEventListener('click', closeLb);
+  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLb(); });
+  document.getElementById('lbPrev').addEventListener('click', () => stepLb(-1));
+  document.getElementById('lbNext').addEventListener('click', () => stepLb(1));
+  document.addEventListener('keydown', e => {
+    if (!lightbox.classList.contains('open')) return;
+    if (e.key === 'ArrowLeft')  stepLb(-1);
+    if (e.key === 'ArrowRight') stepLb(1);
+    if (e.key === 'Escape')     closeLb();
+  });
+
+  // ── RENDER ────────────────────────────────────────────────────
   function renderGallery() {
-    glGrid.querySelectorAll('.gl-item').forEach(el => el.remove());
-    const items = glFiltered();
-    glEmpty.style.display = items.length === 0 ? 'flex' : 'none';
-    items.forEach((foto, idx) => {
-      const div = document.createElement('div');
-      div.className = 'gl-item';
-      div.innerHTML = `<img src="${foto.src}" alt="${foto.alt}" loading="lazy" />`;
-      div.addEventListener('click', () => openLb(lightbox, lbImg, idx, glFiltered));
-      glGrid.appendChild(div);
-    });
+    glGrid.querySelectorAll('.gl-item, .inv-item').forEach(el => el.remove());
+    invRefresh.style.display = 'none';
+
+    if (glCat === 'invitados') {
+      // Masonry para fotos de invitados
+      glGrid.classList.add('masonry');
+      invRefresh.style.display = invFotos.length > 0 ? 'block' : 'none';
+
+      if (invFotos.length === 0) {
+        glEmpty.style.display = 'flex';
+        glEmptyTitle.textContent = 'Aún no hay fotos';
+        glEmptySub.textContent = '¡Sé el primero en subir la tuya! Usa el botón "Subir fotos" de arriba.';
+        glEmptyBadge.style.display = 'none';
+        return;
+      }
+      glEmpty.style.display = 'none';
+      invFotos.forEach((foto, idx) => {
+        const div = document.createElement('div');
+        div.className = 'inv-item';
+        div.style.animationDelay = `${Math.min(idx, 10) * 35}ms`;
+        div.innerHTML = `
+          <img src="${foto.thumb}" alt="Foto de ${foto.nombre}" loading="lazy" />
+          ${foto.nombre ? `<span class="inv-item-name">${foto.nombre}</span>` : ''}`;
+        div.addEventListener('click', () => openLb(idx, () => invFotos));
+        glGrid.appendChild(div);
+      });
+
+    } else {
+      // Grid cuadrado para fotos oficiales
+      glGrid.classList.remove('masonry');
+      const items = glCat === 'todas' ? FOTOS : FOTOS.filter(f => f.cat === glCat);
+
+      if (items.length === 0) {
+        glEmpty.style.display = 'flex';
+        glEmptyTitle.textContent = 'Las fotos llegarán pronto';
+        glEmptySub.textContent = 'Después de la boda colgaremos aquí todos los recuerdos del día. Vuelve a partir del 13 de septiembre.';
+        glEmptyBadge.style.display = '';
+        return;
+      }
+      glEmpty.style.display = 'none';
+      items.forEach((foto, idx) => {
+        const div = document.createElement('div');
+        div.className = 'gl-item';
+        div.innerHTML = `<img src="${foto.src}" alt="${foto.alt ?? ''}" loading="lazy" />`;
+        div.addEventListener('click', () => openLb(idx, () => items));
+        glGrid.appendChild(div);
+      });
+    }
   }
+
+  // Tabs
   document.querySelectorAll('.gl-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.gl-tab').forEach(b => b.classList.remove('active'));
@@ -426,126 +470,45 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     });
   });
 
-  // Lightbox genérico
-  function openLb(box, imgEl, idx, getItems) {
-    box._idx = idx; box._getItems = getItems;
-    imgEl.src = getItems()[idx].full ?? getItems()[idx].src;
-    box.classList.add('open');
-    document.body.style.overflow = 'hidden';
-  }
-  function closeLb(box) { box.classList.remove('open'); document.body.style.overflow = ''; }
-  function stepLb(box, imgEl, dir) {
-    const items = box._getItems();
-    box._idx = (box._idx + dir + items.length) % items.length;
-    imgEl.src = items[box._idx].full ?? items[box._idx].src;
-  }
-  lbClose.addEventListener('click', () => closeLb(lightbox));
-  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLb(lightbox); });
-  lbPrev.addEventListener('click', () => stepLb(lightbox, lbImg, -1));
-  lbNext.addEventListener('click', () => stepLb(lightbox, lbImg,  1));
-
   renderGallery();
 
-  // ── FOTOS DE INVITADOS ─────────────────────────────────────────
-  const invGrid      = document.getElementById('invGrid');
-  const invLoading   = document.getElementById('invLoading');
-  const invRefresh   = document.getElementById('invRefresh');
-  const invTimer     = document.getElementById('invTimer');
-  const invLightbox  = document.getElementById('invLightbox');
-  const invLbImg     = document.getElementById('invLbImg');
-  const invLbClose   = document.getElementById('invLbClose');
-  const invLbPrev    = document.getElementById('invLbPrev');
-  const invLbNext    = document.getElementById('invLbNext');
-
-  invLbClose.addEventListener('click', () => closeLb(invLightbox));
-  invLightbox.addEventListener('click', e => { if (e.target === invLightbox) closeLb(invLightbox); });
-  invLbPrev.addEventListener('click', () => stepLb(invLightbox, invLbImg, -1));
-  invLbNext.addEventListener('click', () => stepLb(invLightbox, invLbImg,  1));
-
-  document.addEventListener('keydown', e => {
-    const box = [lightbox, invLightbox].find(b => b.classList.contains('open'));
-    if (!box) return;
-    const img = box === lightbox ? lbImg : invLbImg;
-    if (e.key === 'ArrowLeft')  stepLb(box, img, -1);
-    if (e.key === 'ArrowRight') stepLb(box, img,  1);
-    if (e.key === 'Escape')     closeLb(box);
-  });
-
-  let invFotos = [];
-  let secondsSince = 0;
-
-  function renderInvGrid() {
-    invGrid.querySelectorAll('.inv-item').forEach(el => el.remove());
-    if (invFotos.length === 0) {
-      const empty = document.createElement('div');
-      empty.className = 'inv-empty';
-      empty.textContent = 'Aún no hay fotos. ¡Sé el primero en subir la tuya!';
-      invGrid.appendChild(empty);
-      return;
-    }
-    invFotos.forEach((foto, idx) => {
-      const div = document.createElement('div');
-      div.className = 'inv-item';
-      div.style.animationDelay = `${Math.min(idx, 8) * 40}ms`;
-      div.innerHTML = `
-        <img src="${foto.thumb}" alt="Foto de ${foto.nombre}" loading="lazy" />
-        ${foto.nombre ? `<span class="inv-item-name">${foto.nombre}</span>` : ''}`;
-      div.addEventListener('click', () => openLb(invLightbox, invLbImg, idx, () => invFotos));
-      invGrid.appendChild(div);
-    });
-  }
-
-  async function fetchInvFotos(showLoading = false) {
-    if (showLoading) invLoading.style.display = 'block';
+  // ── FOTOS INVITADOS: FETCH ─────────────────────────────────────
+  async function fetchInvFotos() {
     try {
       const res  = await fetch('/.netlify/functions/fotos-invitados');
       const data = await res.json();
       if (Array.isArray(data)) {
         invFotos = data;
-        renderInvGrid();
         secondsSince = 0;
-        invRefresh.style.display = 'block';
-        invTimer.textContent = '0';
+        if (glCat === 'invitados') renderGallery();
+        // Actualizar badge en la pestaña
+        const tab = document.querySelector('.gl-tab[data-cat="invitados"]');
+        if (tab && data.length > 0) tab.textContent = `Invitados (${data.length})`;
       }
-    } catch {
-      if (invFotos.length === 0) {
-        invLoading.textContent = 'No se pudo cargar. Comprueba la conexión.';
-      }
-    } finally {
-      if (showLoading) invLoading.style.display = 'none';
-    }
+    } catch { /* silencioso */ }
   }
 
-  // Primer fetch al cargar
-  fetchInvFotos(true);
-
-  // Refresco cada 30 segundos
+  fetchInvFotos();
   setInterval(() => fetchInvFotos(), 30_000);
+  setInterval(() => { secondsSince++; if (invTimer) invTimer.textContent = String(secondsSince); }, 1_000);
 
-  // Contador de segundos
-  setInterval(() => {
-    secondsSince++;
-    if (invTimer) invTimer.textContent = String(secondsSince);
-  }, 1_000);
+  // ── UPLOAD ────────────────────────────────────────────────────
+  const uploadForm   = document.getElementById('uploadForm');
+  const fileInput    = document.getElementById('ufFileInput');
+  const dropzone     = document.getElementById('ufDropzone');
+  const fileCount    = document.getElementById('ufFileCount');
+  const progressWrap = document.getElementById('ufProgressWrap');
+  const progressBar  = document.getElementById('ufProgressBar');
+  const submitBtn    = document.getElementById('ufSubmitBtn');
+  const uploadOk     = document.getElementById('uploadOk');
+  const uploadAgain  = document.getElementById('uploadAgain');
+  const nombreInput  = document.getElementById('ufNombre');
 
-  // ── SUBIR FOTOS A CLOUDINARY ───────────────────────────────────
-  const uploadForm   = document.getElementById('invUploadForm');
-  const fileInput    = document.getElementById('invFileInput');
-  const dropzone     = document.getElementById('invDropzone');
-  const fileCount    = document.getElementById('invFileCount');
-  const progressWrap = document.getElementById('invProgressWrap');
-  const progressBar  = document.getElementById('invProgressBar');
-  const submitBtn    = document.getElementById('invSubmitBtn');
-  const uploadOk     = document.getElementById('invUploadOk');
-  const uploadAgain  = document.getElementById('invUploadAgain');
-  const nombreInput  = document.getElementById('invNombre');
-
-  fileInput.addEventListener('change', updateCount);
   function updateCount() {
     const n = fileInput.files?.length ?? 0;
     fileCount.textContent = n > 0 ? `${n} foto${n > 1 ? 's' : ''} seleccionada${n > 1 ? 's' : ''}` : '';
   }
-
+  fileInput.addEventListener('change', updateCount);
   dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
   dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
   dropzone.addEventListener('drop', e => {
@@ -566,7 +529,7 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     const files  = Array.from(fileInput.files ?? []);
     if (!files.length) { alert('Selecciona al menos una foto.'); return; }
     if (!cloudName || !preset) {
-      alert('La subida aún no está configurada. Vuelve el día de la boda.');
+      alert('La subida aún no está configurada.');
       return;
     }
 
@@ -575,22 +538,15 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     progressBar.style.width = '0%';
 
     let uploaded = 0;
-    const total  = files.length;
-
     for (const file of files) {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('upload_preset', preset);
       fd.append('folder', 'wedding/invitados');
       if (nombre) fd.append('context', `nombre=${nombre}`);
-
-      await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-        method: 'POST',
-        body: fd,
-      });
-
+      await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: fd });
       uploaded++;
-      progressBar.style.width = `${(uploaded / total) * 100}%`;
+      progressBar.style.width = `${(uploaded / files.length) * 100}%`;
     }
 
     submitBtn.disabled = false;
@@ -598,8 +554,10 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     uploadForm.style.display = 'none';
     uploadOk.style.display = 'block';
 
-    // Refrescar galería inmediatamente
+    // Refrescar y saltar a la pestaña invitados
     await fetchInvFotos();
+    document.querySelector('.gl-tab[data-cat="invitados"]').click();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   });
 </script>
 
