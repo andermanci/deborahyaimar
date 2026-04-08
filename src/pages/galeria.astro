@@ -94,26 +94,28 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     .gl-grid-wrap { padding: 3rem 1.5rem 5rem; max-width: 1200px; margin: 0 auto; }
 
     /* Modo cuadrícula (fotos oficiales) */
-    .gl-grid {
+    .gl-grid[data-layout="grid"] {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-      gap: 1px;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 2px;
     }
     .gl-item { aspect-ratio: 1; overflow: hidden; background: var(--blush); cursor: pointer; }
     .gl-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
     .gl-item:hover img { transform: scale(1.04); }
 
     /* Modo masonry (fotos invitados) */
-    .gl-grid.masonry {
-      display: block;
-      columns: 2; column-gap: 4px;
+    .gl-grid[data-layout="masonry"] {
+      column-count: 2;
+      column-gap: 4px;
     }
-    @media (min-width: 500px)  { .gl-grid.masonry { columns: 3; } }
-    @media (min-width: 750px)  { .gl-grid.masonry { columns: 4; } }
-    @media (min-width: 1000px) { .gl-grid.masonry { columns: 5; } }
+    @media (min-width: 480px)  { .gl-grid[data-layout="masonry"] { column-count: 3; } }
+    @media (min-width: 720px)  { .gl-grid[data-layout="masonry"] { column-count: 4; } }
+    @media (min-width: 1000px) { .gl-grid[data-layout="masonry"] { column-count: 5; } }
 
     .inv-item {
-      break-inside: avoid; margin-bottom: 4px;
+      -webkit-column-break-inside: avoid;
+      break-inside: avoid;
+      margin-bottom: 4px;
       position: relative; cursor: pointer; overflow: hidden;
       background: var(--rose);
       animation: fadeIn 0.35s ease both;
@@ -122,19 +124,21 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     .inv-item:hover img { transform: scale(1.04); }
     .inv-item-name {
       position: absolute; bottom: 0; left: 0; right: 0;
-      padding: 0.5rem 0.7rem;
-      background: linear-gradient(transparent, rgba(15,5,5,0.6));
-      font-size: 0.68rem; letter-spacing: 0.06em; color: #fff;
+      padding: 0.35rem 0.6rem;
+      background: linear-gradient(transparent, rgba(10,3,3,0.45));
+      font-size: 0.58rem; letter-spacing: 0.1em; color: rgba(255,255,255,0.75);
       opacity: 0; transition: opacity 0.25s;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .inv-item:hover .inv-item-name { opacity: 1; }
 
     /* Estado vacío */
     .gl-empty {
-      grid-column: 1 / -1;
       display: flex; flex-direction: column; align-items: center;
       justify-content: center; padding: 6rem 2rem; text-align: center;
     }
+    .gl-grid[data-layout="grid"] .gl-empty { grid-column: 1 / -1; }
+    .gl-grid[data-layout="masonry"] .gl-empty { column-span: all; }
     .gl-empty-icon { width: 52px; height: 52px; margin-bottom: 2rem; color: var(--rose); }
     .gl-empty-title {
       font-size: 1rem; font-weight: 300; letter-spacing: 0.12em;
@@ -146,8 +150,6 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase;
       color: var(--pink); border: 1px solid var(--rose); padding: 0.4rem 1.2rem; border-radius: 50px;
     }
-    /* Para masonry el empty ocupa todo el ancho */
-    .gl-grid.masonry .gl-empty { column-span: all; display: flex; }
 
     /* Refresh bar (invitados) */
     .inv-refresh {
@@ -292,7 +294,7 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
 
   <!-- GRID -->
   <div class="gl-grid-wrap">
-    <div class="gl-grid" id="glGrid">
+    <div class="gl-grid" id="glGrid" data-layout="grid">
       <div class="gl-empty" id="glEmpty">
         <svg class="gl-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
           <rect x="3" y="3" width="18" height="18" rx="2"/>
@@ -414,8 +416,7 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     invRefresh.style.display = 'none';
 
     if (glCat === 'invitados') {
-      // Masonry para fotos de invitados
-      glGrid.classList.add('masonry');
+      glGrid.dataset.layout = 'masonry';
       invRefresh.style.display = invFotos.length > 0 ? 'block' : 'none';
 
       if (invFotos.length === 0) {
@@ -438,8 +439,7 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       });
 
     } else {
-      // Grid cuadrado para fotos oficiales
-      glGrid.classList.remove('masonry');
+      glGrid.dataset.layout = 'grid';
       const items = glCat === 'todas' ? FOTOS : FOTOS.filter(f => f.cat === glCat);
 
       if (items.length === 0) {
