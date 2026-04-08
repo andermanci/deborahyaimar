@@ -121,17 +121,52 @@
     <div class="rsvp-inner">
       <img src="/logo-negativo.png" alt="A&D" class="rsvp-logo" />
       <h2 class="rsvp-title">¿Contamos contigo?</h2>
-      <p class="rsvp-sub">Si así es, háznoslo saber antes del <strong>10 de agosto</strong></p>
-      <div class="rsvp-contacts">
-        <a href="tel:+34634421876" class="rsvp-contact">
-          <span class="rsvp-name">Aimar</span>
-          <span class="rsvp-phone">634 421 876</span>
-        </a>
-        <div class="rsvp-divider-v"></div>
-        <a href="tel:+34644455703" class="rsvp-contact">
-          <span class="rsvp-name">Deborah</span>
-          <span class="rsvp-phone">644 455 703</span>
-        </a>
+      <p class="rsvp-sub">Confírmanos antes del <strong>10 de agosto</strong></p>
+
+      <!-- Formulario -->
+      <form class="rsvp-form" id="rsvpForm" name="rsvp" method="POST" data-netlify="true">
+        <div class="rf-field">
+          <label for="nombre">Nombre</label>
+          <input type="text" id="nombre" name="nombre" required placeholder="Tu nombre completo" autocomplete="name" />
+        </div>
+
+        <div class="rf-field">
+          <span class="rf-label">¿Asistirás?</span>
+          <div class="rf-toggle">
+            <label class="rf-opt">
+              <input type="radio" name="asistencia" value="si" required />
+              <span>Sí, allí estaré</span>
+            </label>
+            <label class="rf-opt">
+              <input type="radio" name="asistencia" value="no" />
+              <span>No podré ir</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="rf-field" id="rfPersonas" style="display:none">
+          <label for="personas">¿Cuántos venís?</label>
+          <div class="rf-counter">
+            <button type="button" class="rf-count-btn" id="rfMinus">−</button>
+            <span id="rfCount">1</span>
+            <button type="button" class="rf-count-btn" id="rfPlus">+</button>
+            <input type="hidden" name="personas" id="rfPersonasInput" value="1" />
+          </div>
+        </div>
+
+        <div class="rf-field" id="rfAlergias" style="display:none">
+          <label for="alergias">Alergias o intolerancias</label>
+          <textarea id="alergias" name="alergias" rows="3" placeholder="Si no hay ninguna, déjalo en blanco"></textarea>
+        </div>
+
+        <button type="submit" class="rf-submit">Confirmar</button>
+      </form>
+
+      <!-- Estado de éxito -->
+      <div class="rsvp-ok" id="rsvpOk" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-5"/></svg>
+        <p class="rsvp-ok-title">¡Perfecto!</p>
+        <p class="rsvp-ok-sub">Hemos recibido tu confirmación.<br/>Nos vemos el 12 de septiembre.</p>
       </div>
     </div>
   </section>
@@ -142,6 +177,63 @@
   </footer>
 
 <script>
+  // ── RSVP FORM ─────────────────────────────────────────────────
+  const form        = document.getElementById('rsvpForm')    as HTMLFormElement;
+  const rfPersonas  = document.getElementById('rfPersonas')  as HTMLElement;
+  const rfAlergias  = document.getElementById('rfAlergias')  as HTMLElement;
+  const rfMinus     = document.getElementById('rfMinus')     as HTMLButtonElement;
+  const rfPlus      = document.getElementById('rfPlus')      as HTMLButtonElement;
+  const rfCount     = document.getElementById('rfCount')     as HTMLElement;
+  const rfInput     = document.getElementById('rfPersonasInput') as HTMLInputElement;
+  const rsvpOk      = document.getElementById('rsvpOk')     as HTMLElement;
+  let personas = 1;
+
+  // Mostrar / ocultar campos según asistencia
+  form.querySelectorAll('input[name="asistencia"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+      const val = (form.querySelector('input[name="asistencia"]:checked') as HTMLInputElement)?.value;
+      const asiste = val === 'si';
+      rfPersonas.style.display = asiste ? 'flex' : 'none';
+      rfAlergias.style.display = asiste ? 'flex' : 'none';
+    });
+  });
+
+  // Counter +/-
+  rfMinus.addEventListener('click', () => {
+    if (personas > 1) { personas--; rfCount.textContent = String(personas); rfInput.value = String(personas); }
+  });
+  rfPlus.addEventListener('click', () => {
+    if (personas < 20) { personas++; rfCount.textContent = String(personas); rfInput.value = String(personas); }
+  });
+
+  // Submit: envía a Formspree (reemplaza la URL con tu endpoint real)
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = form.querySelector('.rf-submit') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = 'Enviando…';
+    try {
+      const res = await fetch('/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(new FormData(form) as any).toString(),
+      });
+      if (res.ok) {
+        form.style.display = 'none';
+        rsvpOk.style.display = 'flex';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Confirmar';
+        alert('Hubo un problema. Inténtalo de nuevo.');
+      }
+    } catch {
+      btn.disabled = false;
+      btn.textContent = 'Confirmar';
+      alert('Sin conexión. Inténtalo de nuevo.');
+    }
+  });
+
+  // ── VINILO ────────────────────────────────────────────────────
   const disc = document.querySelector('.vinyl-record') as HTMLElement;
   const SPIN_MS = 20000;
   let spinStart = Date.now();
@@ -558,9 +650,116 @@
     font-weight: 200; letter-spacing: 0.12em;
   }
 
-  .rsvp-divider-v {
-    width: 1px; height: 48px;
-    background: rgba(255,255,255,0.12);
+  /* RSVP FORM */
+  .rsvp-form {
+    width: 100%; max-width: 420px; margin: 0 auto;
+    display: flex; flex-direction: column; gap: 1.4rem;
+    text-align: left;
+  }
+
+  .rf-field {
+    display: flex; flex-direction: column; gap: 0.5rem;
+  }
+
+  .rf-field label, .rf-label {
+    font-size: 0.65rem; letter-spacing: 0.2em;
+    text-transform: uppercase; color: rgba(255,255,255,0.4);
+    font-weight: 400;
+  }
+
+  .rf-field input[type="text"],
+  .rf-field textarea {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 2px;
+    color: #fff; font-family: inherit; font-weight: 300;
+    font-size: 0.9rem; letter-spacing: 0.04em;
+    padding: 0.75rem 1rem;
+    width: 100%;
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  .rf-field input[type="text"]:focus,
+  .rf-field textarea:focus {
+    border-color: var(--pink);
+  }
+  .rf-field input::placeholder,
+  .rf-field textarea::placeholder { color: rgba(255,255,255,0.2); }
+  .rf-field textarea { resize: none; }
+
+  /* Toggle sí/no */
+  .rf-toggle {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem;
+  }
+  .rf-opt {
+    position: relative; cursor: pointer;
+  }
+  .rf-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .rf-opt span {
+    display: block; text-align: center;
+    padding: 0.65rem 0.5rem;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 2px;
+    font-size: 0.78rem; letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.55);
+    transition: all 0.2s;
+  }
+  .rf-opt input:checked + span {
+    border-color: var(--pink);
+    color: #fff;
+    background: rgba(242,179,206,0.1);
+  }
+  .rf-opt:hover span { border-color: rgba(255,255,255,0.3); color: #fff; }
+
+  /* Counter */
+  .rf-counter {
+    display: flex; align-items: center; gap: 1.2rem;
+  }
+  .rf-count-btn {
+    width: 32px; height: 32px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 2px; color: #fff;
+    font-size: 1.2rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color 0.2s;
+    padding: 0;
+  }
+  .rf-count-btn:hover { border-color: var(--pink); }
+  #rfCount {
+    font-size: 1.4rem; font-weight: 200;
+    letter-spacing: 0.08em; color: #fff;
+    min-width: 1.5rem; text-align: center;
+  }
+
+  .rf-submit {
+    margin-top: 0.4rem;
+    background: var(--pink);
+    border: none; border-radius: 2px;
+    color: var(--black); font-family: inherit;
+    font-size: 0.72rem; letter-spacing: 0.22em;
+    text-transform: uppercase; font-weight: 400;
+    padding: 0.9rem 2rem; cursor: pointer;
+    transition: opacity 0.2s;
+    width: 100%;
+  }
+  .rf-submit:hover { opacity: 0.85; }
+  .rf-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* Estado OK */
+  .rsvp-ok {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 1rem;
+    padding: 2rem 0;
+  }
+  .rsvp-ok svg { width: 48px; height: 48px; color: var(--pink); }
+  .rsvp-ok-title {
+    font-family: 'Sloop', cursive; font-size: 2.2rem;
+    color: #fff; font-weight: normal; line-height: 1;
+  }
+  .rsvp-ok-sub {
+    font-size: 0.85rem; color: rgba(255,255,255,0.5);
+    text-align: center; line-height: 1.8; font-weight: 200;
   }
 
   /* FOOTER */
