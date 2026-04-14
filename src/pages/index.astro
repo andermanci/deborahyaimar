@@ -73,7 +73,7 @@
         </span>
         <h3>Hora</h3>
         <p>A las</p>
-        <p class="detalle-main">13:30 h</p>
+        <p class="detalle-main">13:00 h</p>
       </div>
       <div class="detalle-item">
         <span class="detalle-icon">
@@ -502,18 +502,27 @@
   }
 
   /* DETALLES */
-  .detalles { background: var(--cream); max-width: 1000px; margin: 0 auto; }
+  .detalles {
+    background-image: linear-gradient(rgba(250,250,247,0.80), rgba(250,250,247,0.80)), url('/foto2.jpeg');
+    background-size: cover; background-position: center 40%;
+    max-width: 100%; margin: 0;
+  }
+  .detalles .detalles-grid { max-width: 750px; }
 
   .detalles-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 1.5rem; max-width: 750px; margin: 0 auto;
   }
+  .detalles > .section-header { max-width: 750px; margin-left: auto; margin-right: auto; }
 
   .detalle-item {
     text-align: center; padding: 2.5rem 1.5rem;
     border: 1px solid var(--gray-light); border-radius: 2px;
     transition: border-color 0.3s;
+    background: rgba(250,250,247,0.7);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
   }
 
   .detalle-item:hover { border-color: var(--pink); }
@@ -565,7 +574,11 @@
   .mapa-btn svg { width: 13px; height: 13px; }
 
   /* RSVP */
-  .rsvp { background: var(--black); padding: 6rem 1.5rem; }
+  .rsvp {
+    background-image: linear-gradient(rgba(17,17,17,0.88), rgba(17,17,17,0.88)), url('/foto3.jpeg');
+    background-size: cover; background-position: center 25%;
+    padding: 6rem 1.5rem;
+  }
 
   .rsvp-inner { max-width: 560px; margin: 0 auto; text-align: center; }
 
@@ -601,7 +614,7 @@
   .rf-field input[type="text"],
   .rf-field textarea {
     background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.28);
     border-radius: 2px; color: #fff; font-family: inherit; font-weight: 300;
     font-size: 0.9rem; letter-spacing: 0.04em;
     padding: 0.75rem 1rem; width: 100%;
@@ -618,7 +631,7 @@
   .rf-opt input { position: absolute; opacity: 0; width: 0; height: 0; }
   .rf-opt span {
     display: block; text-align: center; padding: 0.65rem 0.5rem;
-    border: 1px solid rgba(255,255,255,0.12); border-radius: 2px;
+    border: 1px solid rgba(255,255,255,0.28); border-radius: 2px;
     font-size: 0.78rem; letter-spacing: 0.08em; color: rgba(255,255,255,0.55);
     transition: all 0.2s;
   }
@@ -649,7 +662,7 @@
   }
   .rf-attendee-fields { display: flex; flex-direction: column; gap: 0.5rem; }
   .rf-attendee-fields input {
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.28);
     border-radius: 2px; color: #fff; font-family: inherit; font-size: 0.85rem;
     font-weight: 300; padding: 0.65rem 0.9rem; width: 100%; transition: border-color 0.2s;
   }
@@ -679,28 +692,28 @@
   }
 
   /* FOTOS PREVIEW */
-  .fotos-preview { background: var(--black); padding: 7rem 1.5rem; text-align: center; }
+  .fotos-preview { background: #f7eef3; padding: 7rem 1.5rem; text-align: center; }
   .fp-inner { max-width: 520px; margin: 0 auto; }
   .fp-eyebrow {
     font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
-    color: var(--pink); font-weight: 400; margin-bottom: 1.2rem;
+    color: var(--pink-deep); font-weight: 400; margin-bottom: 1.2rem;
   }
   .fp-title {
     font-size: clamp(1.6rem, 4vw, 2.2rem); font-weight: 200;
-    letter-spacing: 0.18em; text-transform: uppercase; color: #fff; margin-bottom: 1.4rem;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--black); margin-bottom: 1.4rem;
   }
-  .fp-deco { width: 40px; height: 1px; background: var(--pink); margin: 0 auto 2rem; }
+  .fp-deco { width: 40px; height: 1px; background: var(--pink-deep); margin: 0 auto 2rem; }
   .fp-text {
     font-size: 0.9rem; font-weight: 300; line-height: 1.8;
-    color: rgba(255,255,255,0.5); margin-bottom: 2.5rem;
+    color: var(--gray); margin-bottom: 2.5rem;
   }
   .fp-btn {
     display: inline-block; font-size: 0.68rem; letter-spacing: 0.2em;
-    text-transform: uppercase; color: var(--pink);
-    border: 1px solid var(--pink); padding: 0.75rem 2rem;
+    text-transform: uppercase; color: var(--black);
+    border: 1px solid var(--black); padding: 0.75rem 2rem;
     text-decoration: none; transition: background 0.2s, color 0.2s;
   }
-  .fp-btn:hover { background: var(--pink); color: var(--black); }
+  .fp-btn:hover { background: var(--black); color: var(--cream); }
 
   /* FOOTER */
   footer {
