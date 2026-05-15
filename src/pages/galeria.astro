@@ -280,17 +280,19 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       max-width: 380px; margin-bottom: 3rem;
     }
     .pre-countdown {
-      display: flex; align-items: center; gap: 1.2rem; margin-bottom: 2.5rem;
+      display: flex; align-items: center; flex-wrap: wrap; justify-content: center;
+      gap: 0.6rem 1rem; margin-bottom: 2.5rem; max-width: 360px;
     }
-    .pre-cd-block { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+    .pre-cd-block { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-width: 56px; }
     .pre-cd-num {
-      font-size: clamp(2rem, 6vw, 3rem); font-weight: 200;
+      font-size: clamp(1.8rem, 8vw, 3rem); font-weight: 200;
       letter-spacing: 0.05em; color: var(--dark); line-height: 1;
     }
     .pre-cd-label {
-      font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gray);
+      font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray);
     }
-    .pre-cd-sep { font-size: 1.5rem; color: var(--rose); margin-bottom: 1rem; }
+    .pre-cd-sep { font-size: 1.2rem; color: var(--rose); margin-bottom: 1rem; }
+    @media (max-width: 380px) { .pre-cd-sep { display: none; } }
     .pre-badge {
       font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase;
       color: var(--pink); border: 1px solid var(--rose); padding: 0.45rem 1.4rem; border-radius: 50px;
@@ -325,6 +327,8 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
         <div class="pre-cd-block"><span class="pre-cd-num" id="cdHoras">—</span><span class="pre-cd-label">horas</span></div>
         <div class="pre-cd-sep">·</div>
         <div class="pre-cd-block"><span class="pre-cd-num" id="cdMins">—</span><span class="pre-cd-label">min</span></div>
+        <div class="pre-cd-sep">·</div>
+        <div class="pre-cd-block"><span class="pre-cd-num" id="cdSegs">—</span><span class="pre-cd-label">seg</span></div>
       </div>
       <span class="pre-badge">12 · 09 · 2026</span>
     </div>
@@ -441,12 +445,14 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       const dias  = Math.floor(diff / 86400000);
       const horas = Math.floor((diff % 86400000) / 3600000);
       const mins  = Math.floor((diff % 3600000) / 60000);
+      const segs  = Math.floor((diff % 60000) / 1000);
       document.getElementById('cdDias').textContent  = String(dias);
       document.getElementById('cdHoras').textContent = String(horas).padStart(2, '0');
       document.getElementById('cdMins').textContent  = String(mins).padStart(2, '0');
+      document.getElementById('cdSegs').textContent  = String(segs).padStart(2, '0');
     }
     actualizarCuentaAtras();
-    setInterval(actualizarCuentaAtras, 60_000);
+    setInterval(actualizarCuentaAtras, 1_000);
   }
 
   if (!esHoy) { /* no inicializar galería */ } else {
