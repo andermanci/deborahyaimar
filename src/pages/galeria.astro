@@ -257,6 +257,44 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     .footer-sub { margin-top: 0.2rem; font-size: 0.62rem; opacity: 0.5; }
 
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+    /* PRE-BODA */
+    .pre-wrap {
+      min-height: calc(100vh - 56px);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 4rem 1.5rem;
+    }
+    .pre-eyebrow {
+      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
+      color: var(--pink); margin-bottom: 1.2rem;
+    }
+    .pre-title {
+      font-family: 'Sloop', cursive;
+      font-size: clamp(2.8rem, 8vw, 5rem);
+      font-weight: normal; color: var(--dark);
+      line-height: 1.1; margin-bottom: 1.4rem;
+    }
+    .pre-deco { width: 40px; height: 1px; background: var(--rose); margin: 0 auto 2rem; }
+    .pre-text {
+      font-size: 0.88rem; color: var(--gray); line-height: 1.9;
+      max-width: 380px; margin-bottom: 3rem;
+    }
+    .pre-countdown {
+      display: flex; align-items: center; gap: 1.2rem; margin-bottom: 2.5rem;
+    }
+    .pre-cd-block { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; }
+    .pre-cd-num {
+      font-size: clamp(2rem, 6vw, 3rem); font-weight: 200;
+      letter-spacing: 0.05em; color: var(--dark); line-height: 1;
+    }
+    .pre-cd-label {
+      font-size: 0.55rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gray);
+    }
+    .pre-cd-sep { font-size: 1.5rem; color: var(--rose); margin-bottom: 1rem; }
+    .pre-badge {
+      font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase;
+      color: var(--pink); border: 1px solid var(--rose); padding: 0.45rem 1.4rem; border-radius: 50px;
+    }
   </style>
 </head>
 <body>
@@ -273,6 +311,27 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       Subir fotos
     </a>
   </nav>
+
+  <!-- PRE-BODA: visible solo antes del 12/09/2026 -->
+  <div id="preBoda" style="display:none">
+    <div class="pre-wrap">
+      <p class="pre-eyebrow">Galería</p>
+      <h2 class="pre-title">Las fotos del día</h2>
+      <div class="pre-deco"></div>
+      <p class="pre-text">La galería estará disponible a partir del día de la boda.<br/>Vuelve el 12 de septiembre.</p>
+      <div class="pre-countdown" id="preCountdown">
+        <div class="pre-cd-block"><span class="pre-cd-num" id="cdDias">—</span><span class="pre-cd-label">días</span></div>
+        <div class="pre-cd-sep">·</div>
+        <div class="pre-cd-block"><span class="pre-cd-num" id="cdHoras">—</span><span class="pre-cd-label">horas</span></div>
+        <div class="pre-cd-sep">·</div>
+        <div class="pre-cd-block"><span class="pre-cd-num" id="cdMins">—</span><span class="pre-cd-label">min</span></div>
+      </div>
+      <span class="pre-badge">12 · 09 · 2026</span>
+    </div>
+  </div>
+
+  <!-- POST-BODA: visible desde el 12/09/2026 -->
+  <div id="postBoda" style="display:none">
 
   <!-- HEADER -->
   <div class="gl-header">
@@ -360,12 +419,38 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     </div>
   </section>
 
+  </div> <!-- /postBoda -->
+
   <footer>
     <p>Aimar & Deborah · 12 · 09 · 2026</p>
     <p class="footer-sub">deborahyaimar.com</p>
   </footer>
 
 <script define:vars={{ cloudName, preset }} is:inline>
+  // ── FECHA DE BODA ─────────────────────────────────────────────
+  const BODA = new Date('2026-09-12T00:00:00');
+  const esHoy = new Date() >= BODA;
+
+  document.getElementById('preBoda').style.display  = esHoy ? 'none' : 'block';
+  document.getElementById('postBoda').style.display = esHoy ? 'block' : 'none';
+
+  if (!esHoy) {
+    function actualizarCuentaAtras() {
+      const diff = BODA - new Date();
+      if (diff <= 0) { location.reload(); return; }
+      const dias  = Math.floor(diff / 86400000);
+      const horas = Math.floor((diff % 86400000) / 3600000);
+      const mins  = Math.floor((diff % 3600000) / 60000);
+      document.getElementById('cdDias').textContent  = String(dias);
+      document.getElementById('cdHoras').textContent = String(horas).padStart(2, '0');
+      document.getElementById('cdMins').textContent  = String(mins).padStart(2, '0');
+    }
+    actualizarCuentaAtras();
+    setInterval(actualizarCuentaAtras, 60_000);
+  }
+
+  if (!esHoy) { /* no inicializar galería */ } else {
+
   // ── DATOS GALERÍA OFICIAL ──────────────────────────────────────
   // Rellenar después de la boda:
   // { src: '/fotos/foto.jpg', full: '/fotos/foto.jpg', cat: 'ceremonia', alt: '' }
@@ -559,6 +644,8 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     document.querySelector('.gl-tab[data-cat="invitados"]').click();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
+
+  } // fin bloque esHoy
 </script>
 
 </body>
