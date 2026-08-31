@@ -20,6 +20,18 @@ const ALMACEN = 'cola';
 const CONCURRENCIA = 3;
 const MAX_INTENTOS = 6;
 
+// fetch NO tiene tiempo de espera por defecto. En un móvil que pierde
+// cobertura a media petición, la promesa puede no resolverse NUNCA: la cola se
+// queda colgada y ya no la despierta ni volver la conexión. Todo lo que sale a
+// la red lleva plazo.
+const PLAZO_API = 20_000;      // firmar / completar: son peticiones pequeñas
+const PLAZO_FOTO = 90_000;     // ~500 KB con cobertura mala
+const PLAZO_PARTE = 180_000;   // trozo de vídeo de 5 MB
+
+// Si un elemento lleva demasiado en «subiendo», es que su pestaña murió o su
+// petición se quedó colgada: se recupera para volver a intentarlo.
+const PLAZO_HUERFANO = 5 * 60_000;
+
 export type EstadoItem = 'pendiente' | 'subiendo' | 'hecho' | 'fallido';
 
 export interface SubidaFirmada {
@@ -46,6 +58,8 @@ export interface ItemCola {
   intentos: number;
   error?: string;
   creado: number;
+  marcadoEn?: number;    // cuándo pasó a «subiendo», para detectar huérfanos
+  reintentarEn?: number; // no volver a intentarlo antes de este instante
 }
 
 export interface ResumenCola {
@@ -92,6 +106,20 @@ const leerTodo = () => tx<ItemCola[]>('readonly', (s) => s.getAll());
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** fetch con plazo. Sin esto, una petición colgada mata la cola entera. */
+async function fetchConPlazo(url: string, opciones: RequestInit, ms: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const reloj = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...opciones, signal: ctrl.signal });
+  } catch (err) {
+    if (ctrl.signal.aborted) throw new Error('Se agotó el tiempo de espera. ¿Hay cobertura?');
+    throw err;
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
 /** Backoff exponencial con jitter: evita que 150 móviles reintenten a la vez. */
 function retardo(intento: number): number {
   const base = Math.min(30_000, 1000 * 2 ** intento);
@@ -103,6 +131,7 @@ function retardo(intento: number): number {
 export class ColaSubida {
   private api: string;
   private corriendo = false;
+  private inicioRonda = 0;
   private oyentes: ((r: ResumenCola) => void)[] = [];
 
   constructor(apiBase: string) {
@@ -127,16 +156,25 @@ export class ColaSubida {
    * IndexedDB para siempre y nadie la retomaba.
    */
   private async iniciar(): Promise<void> {
-    const items = await leerTodo();
-
-    // Los 'subiendo' son huérfanos de una pestaña que murió: nadie los está
-    // subiendo ya, así que vuelven a la cola.
-    for (const item of items.filter((i) => i.estado === 'subiendo')) {
-      await guardar({ ...item, estado: 'pendiente' });
-    }
-
+    await this.recuperarHuerfanos(true);
     await this.avisar();
     void this.procesar();
+  }
+
+  /**
+   * Devuelve a la cola lo que se quedó a medias.
+   * Al arrancar, todo lo que esté en «subiendo» es de una sesión anterior.
+   * Durante la ejecución, solo lo que lleve parado más de PLAZO_HUERFANO.
+   */
+  private async recuperarHuerfanos(todos = false): Promise<void> {
+    const items = await leerTodo();
+    for (const item of items) {
+      if (item.estado !== 'subiendo') continue;
+      const parado = Date.now() - (item.marcadoEn ?? 0);
+      if (todos || parado > PLAZO_HUERFANO) {
+        await guardar({ ...item, estado: 'pendiente' });
+      }
+    }
   }
 
   alCambiar(fn: (r: ResumenCola) => void) {
@@ -190,7 +228,7 @@ export class ColaSubida {
   async reintentarFallidos(): Promise<void> {
     const items = await leerTodo();
     for (const item of items.filter((i) => i.estado === 'fallido')) {
-      await guardar({ ...item, estado: 'pendiente', intentos: 0, error: undefined });
+      await guardar({ ...item, estado: 'pendiente', intentos: 0, error: undefined, reintentarEn: 0 });
     }
     await this.avisar();
     void this.procesar();
@@ -204,14 +242,32 @@ export class ColaSubida {
 
   /** Bucle principal. Idempotente: llamarlo de más no hace daño. */
   async procesar(): Promise<void> {
-    if (this.corriendo) return;
+    // Si la ronda anterior lleva colgada más que el plazo de un huérfano, se
+    // da por muerta. Sin esta salida, un `corriendo` atascado deja la cola
+    // inservible para el resto de la sesión.
+    if (this.corriendo) {
+      if (Date.now() - this.inicioRonda < PLAZO_HUERFANO) return;
+    }
     this.corriendo = true;
+    this.inicioRonda = Date.now();
     try {
       for (;;) {
+        await this.recuperarHuerfanos();
         const items = await leerTodo();
-        const listos = items.filter((i) => i.estado === 'pendiente');
-        if (!listos.length) break;
+        const pendientes = items.filter((i) => i.estado === 'pendiente');
+        if (!pendientes.length) break;
         if (!navigator.onLine) break;
+
+        const ahora = Date.now();
+        const listos = pendientes.filter((i) => (i.reintentarEn ?? 0) <= ahora);
+
+        // Todo lo pendiente está esperando su turno de reintento: dormimos
+        // hasta el más próximo en vez de girar en vacío.
+        if (!listos.length) {
+          const proximo = Math.min(...pendientes.map((i) => i.reintentarEn ?? ahora));
+          await esperar(Math.max(500, Math.min(proximo - ahora, 30_000)));
+          continue;
+        }
 
         const lote = listos.slice(0, CONCURRENCIA);
         await Promise.all(lote.map((i) => this.subirItem(i)));
@@ -223,7 +279,7 @@ export class ColaSubida {
   }
 
   private async subirItem(item: ItemCola): Promise<void> {
-    await guardar({ ...item, estado: 'subiendo' });
+    await guardar({ ...item, estado: 'subiendo', marcadoEn: Date.now() });
     await this.avisar();
 
     try {
@@ -240,8 +296,12 @@ export class ColaSubida {
       if (intentos >= MAX_INTENTOS) {
         await guardar({ ...item, estado: 'fallido', intentos, error: mensaje });
       } else {
-        await guardar({ ...item, estado: 'pendiente', intentos, error: mensaje });
-        await esperar(retardo(intentos));
+        // Sin await aquí: si esperásemos dentro del lote, una foto que falla
+        // frenaría a las otras dos que van bien.
+        await guardar({
+          ...item, estado: 'pendiente', intentos, error: mensaje,
+          reintentarEn: Date.now() + retardo(intentos),
+        });
       }
     }
   }
@@ -254,11 +314,11 @@ export class ColaSubida {
       size: blob.size,
     }));
 
-    const res = await fetch(`${this.api}/firmar`, {
+    const res = await fetchConPlazo(`${this.api}/firmar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: item.tipo, archivos }),
-    });
+    }, PLAZO_API);
     if (!res.ok) throw new Error(`No se pudo preparar la subida (${res.status})`);
 
     const datos = await res.json();
@@ -282,11 +342,11 @@ export class ColaSubida {
       if (s.rol === 'video') {
         await this.subirVideoPorPartes(item, s, blob);
       } else {
-        const res = await fetch(s.url!, {
+        const res = await fetchConPlazo(s.url!, {
           method: 'PUT',
           body: blob,
           headers: { 'Content-Type': blob.type || 'image/webp' },
-        });
+        }, PLAZO_FOTO);
         if (!res.ok) throw new Error(`Fallo al subir ${s.rol} (${res.status})`);
       }
     }
@@ -309,7 +369,7 @@ export class ColaSubida {
       const desde = (n - 1) * partSize;
       const trozo = blob.slice(desde, Math.min(desde + partSize, blob.size));
 
-      const res = await fetch(urls[n - 1]!, { method: 'PUT', body: trozo });
+      const res = await fetchConPlazo(urls[n - 1]!, { method: 'PUT', body: trozo }, PLAZO_PARTE);
       if (!res.ok) throw new Error(`Fallo al subir la parte ${n} del vídeo (${res.status})`);
 
       // R2 debe exponer ETag por CORS o esto viene vacío y no se puede cerrar
@@ -340,11 +400,11 @@ export class ColaSubida {
       cuerpo.partes = item.partes;
     }
 
-    const res = await fetch(`${this.api}/completar`, {
+    const res = await fetchConPlazo(`${this.api}/completar`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpo),
-    });
+    }, PLAZO_API);
     if (!res.ok) throw new Error(`El servidor rechazó la subida (${res.status})`);
   }
 }

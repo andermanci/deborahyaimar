@@ -446,7 +446,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 
   interface Item {
     id: string; tipo: 'foto' | 'video'; categoria: string | null;
-    nombre: string; deviceId: string;
+    nombre: string; deviceHash: string;
     thumb: string; web: string; poster: string | null;
     duracion: number | null; ancho: number; alto: number; ts: number;
   }
@@ -466,6 +466,19 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     const deviceId = localStorage.getItem('ad-device') ?? crypto.randomUUID();
     localStorage.setItem('ad-device', deviceId);
     let miNombre = localStorage.getItem('ad-nombre') ?? '';
+
+    // Misma huella que calcula el Worker. El índice solo publica huellas, así
+    // que nadie puede leer el identificador de otro y borrarle las fotos.
+    let miHuella = '';
+    (async () => {
+      const datos = new TextEncoder().encode(`ad-galeria:${deviceId}`);
+      const hash = await crypto.subtle.digest('SHA-256', datos);
+      miHuella = Array.from(new Uint8Array(hash)).slice(0, 12)
+        .map((b) => b.toString(16).padStart(2, '0')).join('');
+      pintar();   // repintar para marcar las propias
+    })();
+
+    const esMia = (item: Item) => Boolean(miHuella) && item.deviceHash === miHuella;
 
     // Arranca visible a propósito: el botón de subir es la acción principal y
     // no puede depender de que llegue el índice. Con mala cobertura, un
@@ -511,7 +524,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       b.type = 'button';
       b.dataset.id = item.id;
       if (item.ancho && item.alto) b.style.aspectRatio = `${item.ancho} / ${item.alto}`;
-      if (item.deviceId && item.deviceId === deviceId) b.classList.add('tarjeta-mia');
+      if (esMia(item)) b.classList.add('tarjeta-mia');
 
       const img = document.createElement('img');
       img.src = item.tipo === 'video' ? (item.poster ?? item.thumb) : item.thumb;
@@ -537,7 +550,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       if (item.nombre) {
         const quien = document.createElement('span');
         quien.className = 'tarjeta-quien';
-        quien.textContent = item.deviceId === deviceId ? `${item.nombre} · tuya` : item.nombre;
+        quien.textContent = esMia(item) ? `${item.nombre} · tuya` : item.nombre;
         b.appendChild(quien);
       }
 
@@ -646,7 +659,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         slot.appendChild(img);
       }
       $('visorQuien').textContent = item.nombre ?? '';
-      ($('visorBorrar') as HTMLElement).hidden = item.deviceId !== deviceId;
+      ($('visorBorrar') as HTMLElement).hidden = !esMia(item);
     }
     function paso(dir: number) {
       const items = visibles();
@@ -678,15 +691,29 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     $('visorBorrar').addEventListener('click', async () => {
       const id = visorId;
       if (!id || !confirm('¿Quitar esta foto de la galería?')) return;
-      invitados = invitados.filter((i) => i.id !== id);
-      cerrarVisor(); pintar();
-      avisar('Foto quitada');
+
+      const boton = $('visorBorrar') as HTMLButtonElement;
+      boton.disabled = true;
+      boton.textContent = 'Quitando…';
+
+      // Nada de quitarla de la pantalla antes de tiempo: si el servidor no lo
+      // confirma, al recargar volvería a aparecer y el aviso habría mentido.
       try {
-        await fetch(`${API}/moderar`, {
+        const res = await fetch(`${API}/borrar`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, deviceId, ocultar: true }),
+          body: JSON.stringify({ id, deviceId }),
         });
-      } catch {}
+        if (!res.ok) throw new Error(String(res.status));
+        invitados = invitados.filter((i) => i.id !== id);
+        cerrarVisor();
+        pintar();
+        avisar('Foto quitada');
+      } catch {
+        avisar('No se pudo quitar. Inténtalo de nuevo.');
+      } finally {
+        boton.disabled = false;
+        boton.textContent = 'Borrar mi foto';
+      }
     });
 
     // ── PESTAÑAS ──────────────────────────────────────────────────

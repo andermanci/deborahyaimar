@@ -29,9 +29,9 @@ const partesRecibidas = [];
 let completadoCon = null;
 
 const indice = { items: [
-  { id: 'a1', tipo: 'foto', categoria: null, nombre: '<img src=x onerror=alert(1)>', deviceId: 'd',
+  { id: 'a1', tipo: 'foto', categoria: null, nombre: '<img src=x onerror=alert(1)>', deviceHash: 'ajena0000000',
     thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, poster: null, duracion: null, ancho: 1200, alto: 800, ts: 2 },
-  { id: 'a2', tipo: 'video', categoria: null, nombre: 'Marta', deviceId: 'd',
+  { id: 'a2', tipo: 'video', categoria: null, nombre: 'Marta', deviceHash: 'ajena0000000',
     thumb: `${BASE}/foto3.jpg`, web: `${BASE}/nope.mp4`, poster: `${BASE}/foto3.jpg`, duracion: 12, ancho: 1080, alto: 1920, ts: 1 },
 ]};
 
@@ -137,6 +137,60 @@ await page.waitForTimeout(1500);
 await page.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 20000 })
   .then(() => ok('la segunda subida se completa en un solo toque'))
   .catch(() => mal('la segunda subida no completó'));
+
+// ── 7. Borrar mi propia foto ─────────────────────────────────────────
+console.log('\n7) Borrar mi propia foto');
+let borradoCon = null;
+await page.route('**/borrar', async (r) => {
+  borradoCon = JSON.parse(r.request().postData());
+  await r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+});
+
+// El índice pasa a incluir una foto MÍA: misma huella que calcula el cliente.
+const miDevice = await page.evaluate(() => localStorage.getItem('ad-device'));
+const miHash = await page.evaluate(async (d) => {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`ad-galeria:${d}`));
+  return Array.from(new Uint8Array(h)).slice(0, 12).map((b) => b.toString(16).padStart(2, '0')).join('');
+}, miDevice);
+
+indice.items = [{ id: 'mia', tipo: 'foto', categoria: null, nombre: 'Ander', deviceHash: miHash,
+  thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, poster: null, duracion: null,
+  ancho: 1200, alto: 800, ts: 9 }];
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.tarjeta', { timeout: 10000 });
+
+(await page.locator('.tarjeta-mia').count()) === 1 ? ok('la foto propia sale marcada') : mal('no está marcada como propia');
+const etiqueta = await page.locator('.tarjeta-quien').first().textContent();
+etiqueta?.includes('tuya') ? ok('la etiqueta dice que es tuya') : mal(`etiqueta: ${etiqueta}`);
+
+page.once('dialog', (d) => d.accept());
+await page.locator('.tarjeta').first().click();
+await page.waitForSelector('.visor.abierto', { timeout: 5000 });
+await page.locator('#visorBorrar').isVisible() ? ok('ofrece borrarla') : mal('no ofrece borrarla');
+await page.click('#visorBorrar');
+await page.waitForTimeout(1200);
+
+borradoCon?.id === 'mia' && borradoCon?.deviceId === miDevice
+  ? ok('llama a /borrar con el id y el device correctos')
+  : mal(`petición: ${JSON.stringify(borradoCon)}`);
+(await page.locator('.tarjeta').count()) === 0 ? ok('desaparece de la pantalla') : mal('sigue en pantalla');
+
+// Y si el servidor la rechaza, NO debe quitarse
+console.log('\n8) Si el servidor rechaza el borrado');
+indice.items = [{ id: 'ajena', tipo: 'foto', categoria: null, nombre: 'Otro', deviceHash: miHash,
+  thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, poster: null, duracion: null,
+  ancho: 1200, alto: 800, ts: 9 }];
+await page.unroute('**/borrar');
+await page.route('**/borrar', (r) => r.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"esa foto no es tuya"}' }));
+await page.reload({ waitUntil: 'networkidle' });
+await page.waitForSelector('.tarjeta', { timeout: 10000 });
+page.once('dialog', (d) => d.accept());
+await page.locator('.tarjeta').first().click();
+await page.waitForSelector('.visor.abierto', { timeout: 5000 });
+await page.click('#visorBorrar');
+await page.waitForTimeout(1200);
+(await page.locator('.tarjeta').count()) === 1 ? ok('la foto SIGUE ahí (no miente)') : mal('la quitó sin permiso del servidor');
+(await page.locator('#aviso').textContent())?.includes('No se pudo') ? ok('avisa de que no se pudo') : mal('no avisó del fallo');
 
 await navegador.close();
 console.log(`\n${'─'.repeat(50)}`);

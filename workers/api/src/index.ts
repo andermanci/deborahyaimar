@@ -88,6 +88,22 @@ async function firmarPut(env: Env, key: string, query = ''): Promise<string> {
   return firmada.url;
 }
 
+/**
+ * Huella del identificador de dispositivo.
+ *
+ * El índice es público y cacheado, así que NO puede llevar el device_id en
+ * claro: cualquiera leería el de otro invitado y le borraría las fotos. Se
+ * publica la huella, que sirve para marcar «esta es tuya» pero no para
+ * suplantar a nadie. Para borrar, el cliente manda el id real y el servidor
+ * lo compara con el guardado.
+ */
+async function huella(deviceId: string): Promise<string> {
+  const datos = new TextEncoder().encode(`ad-galeria:${deviceId}`);
+  const hash = await crypto.subtle.digest('SHA-256', datos);
+  return Array.from(new Uint8Array(hash)).slice(0, 12)
+    .map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function extension(contentType: string): string {
   if (contentType === 'video/mp4') return 'mp4';
   if (contentType === 'video/quicktime') return 'mov';
@@ -257,12 +273,12 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
   ).bind(origen).all();
 
   const base = env.MEDIA_BASE;
-  const items = (results ?? []).map((r: any) => ({
+  const items = await Promise.all((results ?? []).map(async (r: any) => ({
     id: r.id,
     tipo: r.tipo,
     categoria: r.categoria,
     nombre: r.nombre ?? '',
-    deviceId: r.device_id ?? '',
+    deviceHash: r.device_id ? await huella(r.device_id) : '',
     thumb: `${base}/${r.key_thumb}`,
     web: `${base}/${r.key_web}`,
     poster: r.key_poster ? `${base}/${r.key_poster}` : null,
@@ -270,7 +286,7 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     ancho: r.ancho,
     alto: r.alto,
     ts: r.created_at,
-  }));
+  })));
 
   const res = json({ items, total: items.length }, env, 200, {
     // max-age=0 para el NAVEGADOR, s-maxage para el CDN, y NADA de
@@ -279,6 +295,29 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
   });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
+}
+
+// ── POST /borrar ──────────────────────────────────────────────────────
+// El invitado puede quitar SUS fotos, sin contraseña. Se autoriza comparando
+// el device_id que manda con el que quedó guardado al subirla.
+async function borrar(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const id = body?.id;
+  const deviceId = body?.deviceId;
+  if (typeof id !== 'string' || !id) return error('falta id', env);
+  if (typeof deviceId !== 'string' || deviceId.length < 8) return error('falta deviceId', env);
+
+  const fila = await env.DB.prepare('select device_id from media where id = ?')
+    .bind(id).first<{ device_id: string | null }>();
+  if (!fila) return error('esa foto no existe', env, 404);
+  if (!fila.device_id || fila.device_id !== deviceId) {
+    return error('esa foto no es tuya', env, 403);
+  }
+
+  await env.DB.prepare('update media set oculta = 1 where id = ?').bind(id).run();
+  return json({ ok: true }, env);
 }
 
 // ── POST /moderar ─────────────────────────────────────────────────────
@@ -317,6 +356,7 @@ export default {
       }
       if (pathname === '/firmar'      && req.method === 'POST') return await firmar(req, env);
       if (pathname === '/completar'   && req.method === 'POST') return await completar(req, env);
+      if (pathname === '/borrar'      && req.method === 'POST') return await borrar(req, env);
       if (pathname === '/moderar'     && req.method === 'POST') return await moderar(req, env);
     } catch (err) {
       return error(`fallo interno: ${err}`, env, 500);

@@ -142,6 +142,44 @@ console.log('\nC) Se cierra la pestaña a media subida y se vuelve a abrir');
   await ctx.close();
 }
 
+// ══ D. Una petición que se queda colgada (cobertura que se cae a medias) ══
+console.log('\nD) La red se queda colgada a mitad de una subida');
+{
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await nuevaPagina(ctx);
+  let colgar = true;
+  const subidas = new Set();
+
+  await page.route('**/firmar', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: 'h', subidas: [
+      { rol: 'thumb', key: 'invitados/h/thumb.webp', url: `${BASE}/__put/thumb` },
+      { rol: 'web',   key: 'invitados/h/web.webp',   url: `${BASE}/__put/web` }]}) }));
+
+  // La primera petición NUNCA responde: es lo que mata a fetch sin plazo.
+  await page.route('**/__put/**', async (r) => {
+    if (colgar) { colgar = false; return; }        // sin fulfill: cuelga
+    subidas.add(r.request().url());
+    await r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' });
+  });
+  await page.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+
+  await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await page.setInputFiles('#selector', { name: 'f.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await rellenarNombre(page, 'Colgado');
+
+  // Con el plazo de 90 s más el backoff, hay que adelantar el reloj.
+  let recuperado = false;
+  for (let i = 0; i < 60 && !recuperado; i++) {
+    await page.clock.runFor(20_000);
+    await page.waitForTimeout(150);
+    recuperado = (await page.locator('#progresoTexto').textContent()).includes('Gracias');
+  }
+  recuperado
+    ? ok('la cola se recupera de una petición colgada y termina')
+    : mal(`sigue atascada: "${await page.locator('#progresoTexto').textContent()}"`);
+  await ctx.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(52)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Resiliencia correcta');
