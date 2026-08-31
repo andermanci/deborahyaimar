@@ -25,7 +25,9 @@
       --s1:.25rem; --s2:.5rem; --s3:.75rem; --s4:1rem; --s5:1.5rem; --s6:2rem; --s7:3rem;
       --barra-h: 52px;
     }
-    body { background: var(--cream); padding-bottom: 6rem; }
+    body { background: var(--cream); padding-bottom: 2rem; }
+    /* Solo hace falta hueco extra cuando la barra de lote tapa el final. */
+    body.con-lote { padding-bottom: 7rem; }
 
     /* ── ACCESO ──────────────────────────────────────────────────── */
     .acceso {
@@ -63,19 +65,34 @@
       background: rgba(250,248,244,.9); backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border);
     }
-    .barra-marca { font-family: 'Sloop', cursive; font-size: 1.6rem; color: var(--dark); }
-    .barra-acciones { display: flex; gap: var(--s2); align-items: center; }
+    /* La Sloop tiene trazos que se salen de la caja de texto: sin este alto y
+       este padding, la palabra aparecía cortada por arriba y por la izquierda. */
+    .barra-marca {
+      font-family: 'Sloop', cursive; font-size: 1.5rem; line-height: 1.6;
+      color: var(--dark); padding-left: .25rem; overflow: visible; white-space: nowrap;
+    }
+    .barra-acciones { display: flex; gap: var(--s2); align-items: center; flex: none; }
     .icono-btn {
+      display: inline-flex; align-items: center; gap: .35rem;
       background: none; border: 1px solid var(--border); border-radius: 100px;
       font-family: inherit; font-size: .62rem; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--gray); padding: .4rem .8rem; cursor: pointer; white-space: nowrap;
+      color: var(--gray); padding: .45rem .85rem; cursor: pointer; white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
     }
+    .icono-btn svg { width: 13px; height: 13px; }
     .icono-btn.activo { background: var(--dark); color: #fff; border-color: var(--dark); }
+    /* En móvil no caben tres botones de texto: se quedan solo los iconos. */
+    @media (max-width: 520px) { .icono-btn .txt { display: none; } .icono-btn { padding: .45rem .6rem; } }
 
     .secciones {
       display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none;
       padding: var(--s3) var(--s4); position: sticky; top: var(--barra-h); z-index: 90;
       background: rgba(250,248,244,.94); backdrop-filter: blur(14px);
+      /* Difumina los extremos para que se vea que hay más pestañas al lado.
+         Antes se cortaban en seco y parecía un fallo de maquetación. */
+      -webkit-mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+      mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
+      scroll-padding-inline: var(--s4);
     }
     .secciones::-webkit-scrollbar { display: none; }
     .seccion {
@@ -87,13 +104,19 @@
     .seccion.activa { color: var(--dark); background: #fff; border-color: var(--border); }
     .seccion .cuenta { opacity: .55; margin-left: .3rem; }
 
+    /* Una sola fila que se desplaza: en móvil, tres desplegables apilados
+       comían un tercio de la pantalla antes de ver una sola foto. */
     .filtros {
-      display: flex; gap: var(--s2); flex-wrap: wrap; padding: 0 var(--s4) var(--s3);
+      display: flex; gap: var(--s2); padding: 0 var(--s4) var(--s3);
+      overflow-x: auto; scrollbar-width: none;
+      -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
+      mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
     }
+    .filtros::-webkit-scrollbar { display: none; }
     .filtros select {
-      font-family: inherit; font-size: .72rem; color: var(--dark);
+      flex: none; font-family: inherit; font-size: .72rem; color: var(--dark);
       background: #fff; border: 1px solid var(--border); border-radius: 100px;
-      padding: .4rem .8rem; cursor: pointer;
+      padding: .45rem .8rem; cursor: pointer;
     }
 
     /* ── REJILLA ─────────────────────────────────────────────────── */
@@ -151,6 +174,9 @@
     .dato-lbl { font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gray); margin-top: var(--s2); }
 
     .bloque { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: var(--s5); margin: var(--s4) var(--s2) 0; }
+    /* Un desplegable o una zona de soltar no ganan nada por medir 1900 px. */
+    .columna-estrecha { max-width: 620px; margin-inline: auto; padding-inline: var(--s2); }
+    .columna-estrecha .bloque { margin-inline: 0; }
     .bloque h3 { font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: var(--gray); font-weight: 400; margin-bottom: var(--s4); }
     .fila-rank { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s2); font-size: .82rem; }
     .fila-rank .nom { flex: none; width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -169,16 +195,25 @@
     .medidor-txt.aviso { color: var(--err); }
 
     /* ── SUBIDA DEL REPORTAJE ────────────────────────────────────── */
-    .subida { padding: 0 var(--s2); }
     .soltar {
+      /* Es un <button>, así que hay que reponer lo que el navegador le quita:
+         ancho completo, disposición en columna y tipografía heredada. */
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      width: 100%; font-family: inherit;
       border: 1px dashed var(--border); border-radius: 14px; background: #fff;
-      padding: var(--s7) var(--s5); text-align: center; cursor: pointer; position: relative;
+      padding: var(--s6) var(--s5); text-align: center; cursor: pointer;
+      transition: border-color .2s, background .2s;
+      -webkit-tap-highlight-color: transparent;
     }
-    .soltar:hover { border-color: var(--pink); }
-    .soltar input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-    .soltar-txt { font-size: .85rem; color: var(--gray); }
+    .soltar:active { transform: scale(.995); }
+    .soltar:hover, .soltar.encima { border-color: var(--pink); background: rgba(242,179,206,.05); }
+    .soltar-icono { color: var(--pink); margin-bottom: var(--s3); }
+    .soltar-icono svg { width: 26px; height: 26px; }
+    .soltar-txt { font-size: .85rem; color: var(--gray); line-height: 1.6; }
+    .soltar-pista { font-size: .72rem; color: var(--gray); opacity: .7; margin-top: var(--s2); }
     .progreso-caja { margin-top: var(--s4); font-size: .8rem; color: var(--dark); text-align: center; }
     .progreso-linea { height: 4px; background: var(--border); border-radius: 100px; overflow: hidden; margin-top: var(--s2); }
+    .progreso-linea[hidden] { display: none !important; }
     .progreso-linea span { display: block; height: 100%; width: 0; background: var(--pink-deep); transition: width .3s; }
 
     /* ── VISOR ───────────────────────────────────────────────────── */
@@ -222,9 +257,16 @@
     <nav class="barra">
       <span class="barra-marca">Panel</span>
       <div class="barra-acciones">
-        <button class="icono-btn" id="btnSeleccion">Seleccionar</button>
-        <button class="icono-btn" id="btnRecargar">Actualizar</button>
-        <button class="icono-btn" id="btnSalir">Salir</button>
+        <button class="icono-btn" id="btnRecargar" aria-label="Actualizar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.6-6.4"/><polyline points="21 3 21 9 15 9"/>
+          </svg><span class="txt">Actualizar</span>
+        </button>
+        <button class="icono-btn" id="btnSalir" aria-label="Salir">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+          </svg><span class="txt">Salir</span>
+        </button>
       </div>
     </nav>
 
@@ -238,6 +280,7 @@
     </div>
 
     <div class="filtros" id="filtros">
+      <button class="icono-btn" id="btnSeleccion">Seleccionar</button>
       <select id="fTipo">
         <option value="">Fotos y vídeos</option>
         <option value="foto">Solo fotos</option>
@@ -274,7 +317,7 @@
       </section>
 
       <!-- SUBIR REPORTAJE -->
-      <section class="subida" id="vistaSubir" hidden>
+      <section class="columna-estrecha" id="vistaSubir" hidden>
         <div class="bloque">
           <h3>Categoría</h3>
           <select id="catSubida" class="campo" style="text-align:left">
@@ -285,10 +328,20 @@
             <option value="momentos">Momentos</option>
           </select>
         </div>
-        <div class="soltar" id="soltar">
-          <input type="file" id="ficheros" accept="image/*,video/*" multiple />
-          <p class="soltar-txt">Arrastra aquí las fotos del fotógrafo<br/>o toca para elegirlas</p>
-        </div>
+        <!-- El input va oculto de verdad y se abre por código. Con opacity:0
+             seguía en el DOM: se copiaba con la página y los lectores de
+             pantalla anunciaban «Ningún archivo seleccionado». -->
+        <input type="file" id="ficheros" accept="image/*,video/*" multiple hidden />
+        <button type="button" class="soltar" id="soltar">
+          <span class="soltar-icono">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </span>
+          <span class="soltar-txt">Arrastra aquí las fotos del fotógrafo<br/>o toca para elegirlas</span>
+          <span class="soltar-pista" id="soltarCuenta"></span>
+        </button>
         <div class="progreso-caja" id="progresoSubida" hidden>
           <span id="progresoTxt"></span>
           <div class="progreso-linea"><span id="progresoBar"></span></div>
@@ -296,7 +349,7 @@
       </section>
 
       <!-- DESCARGAR -->
-      <section id="vistaDescargar" hidden>
+      <section class="columna-estrecha" id="vistaDescargar" hidden>
         <div class="bloque">
           <h3>Descargar el álbum</h3>
           <p class="medidor-txt" id="descResumen"></p>
@@ -305,7 +358,9 @@
             la versión de 2560&nbsp;px, de sobra para imprimir en 20×30&nbsp;cm.
           </p>
           <button class="boton ancho" id="btnDescargar">Descargar todo</button>
-          <div class="progreso-linea" style="margin-top:1rem"><span id="descBar"></span></div>
+          <!-- Oculta hasta que haya descarga: el carril vacío en rosa parecía
+               una barra ya completa. -->
+          <div class="progreso-linea" id="descLinea" style="margin-top:1rem" hidden><span id="descBar"></span></div>
           <p class="medidor-txt" id="descEstado" style="margin-top:.5rem"></p>
         </div>
       </section>
@@ -508,8 +563,12 @@
       rejilla.appendChild(c);
       return c;
     });
+    // Cada foto va a la columna más corta en ese momento. Con el reparto por
+    // turnos, una columna que pillaba varias verticales seguidas acababa muy
+    // por debajo de las demás y quedaba un escalón feo al final.
+    const alturas = new Array(n).fill(0);
 
-    items.forEach((item, i) => {
+    items.forEach((item) => {
       const b = document.createElement('button');
       b.className = 'celda';
       b.type = 'button';
@@ -548,7 +607,10 @@
         if (modoSel) alternar(item.id, b);
         else abrirVisor(item);
       });
-      cols[i % n]!.appendChild(b);
+      let destino = 0;
+      for (let c = 1; c < n; c++) if (alturas[c]! < alturas[destino]!) destino = c;
+      alturas[destino] += (item.alto || 1) / (item.ancho || 1);   // alto relativo
+      cols[destino]!.appendChild(b);
     });
 
     const vacio = $('vacioMsg');
@@ -597,6 +659,7 @@
     const n = seleccion.size;
     const lote = $('lote');
     lote.hidden = !modoSel || n === 0;
+    document.body.classList.toggle('con-lote', !lote.hidden);
     $('btnOcultar').textContent = `Ocultar (${n})`;
     $('btnRestaurar').textContent = `Restaurar (${n})`;
     $('btnEliminar').textContent = `Borrar definitivamente (${n})`;
@@ -744,10 +807,11 @@
   const ficheros = $('ficheros') as HTMLInputElement;
   const soltar = $('soltar');
 
-  soltar.addEventListener('dragover', (e) => { e.preventDefault(); soltar.style.borderColor = 'var(--pink)'; });
-  soltar.addEventListener('dragleave', () => { soltar.style.borderColor = ''; });
+  soltar.addEventListener('click', () => ficheros.click());
+  soltar.addEventListener('dragover', (e) => { e.preventDefault(); soltar.classList.add('encima'); });
+  soltar.addEventListener('dragleave', () => soltar.classList.remove('encima'));
   soltar.addEventListener('drop', (e) => {
-    e.preventDefault(); soltar.style.borderColor = '';
+    e.preventDefault(); soltar.classList.remove('encima');
     const dt = (e as DragEvent).dataTransfer;
     if (dt?.files?.length) { ficheros.files = dt.files; ficheros.dispatchEvent(new Event('change')); }
   });
@@ -756,6 +820,7 @@
     const lista = Array.from(ficheros.files ?? []);
     ficheros.value = '';
     if (!lista.length) return;
+    $('soltarCuenta').textContent = lista.length === 1 ? '1 archivo' : `${lista.length} archivos`;
 
     const categoria = ($('catSubida') as HTMLSelectElement).value;
     const token = JSON.parse(sessionStorage.getItem(LLAVE) ?? '{}')?.token ?? '';
@@ -780,6 +845,7 @@
     $('progresoBar').style.width = `${Math.round((r.hechos / r.total) * 100)}%`;
     if (r.hechos === r.total && !r.fallidos) {
       $('progresoTxt').textContent = `Listo: ${r.hechos} al reportaje`;
+      $('soltarCuenta').textContent = '';
       setTimeout(() => { cola.limpiarHechos(); recargar(); }, 2500);
     } else {
       const partes = [`${r.hechos} de ${r.total} listas`];
@@ -807,6 +873,7 @@
     const items = paraDescargar();
     const boton = $('btnDescargar') as HTMLButtonElement;
     boton.disabled = true;
+    ($('descLinea') as HTMLElement).hidden = false;
 
     try {
       for (let t = 0; t * POR_TANDA < items.length; t++) {
@@ -839,6 +906,7 @@
     } finally {
       boton.disabled = false;
       $('descBar').style.width = '0%';
+      ($('descLinea') as HTMLElement).hidden = true;
     }
   });
 </script>
