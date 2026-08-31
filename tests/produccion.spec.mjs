@@ -75,7 +75,8 @@ await page.waitForSelector('.tarjeta', { timeout: 60000 })
     console.log('    diagnóstico:', JSON.stringify(diag));
   });
 const nombre = await page.locator('.tarjeta-quien').first().textContent().catch(() => '');
-nombre === 'Ensayo Claude' ? ok('con el nombre de quien la subió') : mal(`nombre: "${nombre}"`);
+// Las propias llevan el sufijo «· tuya», que es justo lo que queremos ver.
+nombre?.startsWith('Ensayo Claude') ? ok(`con el nombre de quien la subió ("${nombre}")`) : mal(`nombre: "${nombre}"`);
 const src = await page.locator('.tarjeta img').first().getAttribute('src').catch(() => '');
 src?.includes('fotos.deborahyaimar.org') ? ok('servida desde fotos.deborahyaimar.org') : mal(`src: ${src}`);
 
