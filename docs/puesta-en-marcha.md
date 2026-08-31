@@ -93,7 +93,10 @@ desde el panel de Cloudinary.
 
 ## 4-ter. El panel de los novios
 
-**`deborahyaimar.com/admin`** · usuario `novios` · contraseña la de `ADMIN_PASSWORD`.
+**`deborahyaimar.com/admin`** · usuario `admin` · contraseña `DeborahAimar12`.
+
+Se cambian con `wrangler secret put ADMIN_USER` y `ADMIN_PASSWORD` desde `workers/api`.
+Cambiar la contraseña cierra todas las sesiones abiertas, porque el token se firma con ella.
 
 Al entrar se recibe un token firmado con 12 h de caducidad; la contraseña no se guarda en
 el navegador ni se reenvía. El secreto `ADMIN_USER` define el usuario, y el token se firma
