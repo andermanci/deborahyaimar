@@ -12,6 +12,11 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* El atributo hidden debe ganar a cualquier `display` de clase.
+   Sin esto, .nav-upload-btn { display: flex } dejaba el botón "Subir"
+   visible antes de la boda aunque estuviera marcado como hidden. */
+[hidden] { display: none !important; }
+
 :root {
   --cream: #FAF8F4;
   --blush: #F5E5ED;
