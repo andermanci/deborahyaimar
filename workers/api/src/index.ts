@@ -18,6 +18,7 @@ export interface Env {
   R2_BUCKET: string;
   R2_ACCESS_KEY_ID: string;
   R2_SECRET_ACCESS_KEY: string;
+  ADMIN_USER: string;
   ADMIN_PASSWORD: string;
 }
 
@@ -48,7 +49,7 @@ function cors(env: Env, extra: HeadersInit = {}): HeadersInit {
   return {
     'Access-Control-Allow-Origin': env.SITIO,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Password',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400',
     ...extra,
   };
@@ -106,20 +107,100 @@ async function huella(deviceId: string): Promise<string> {
     .map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ══ SESIÓN DEL PANEL ══════════════════════════════════════════════════
+// La contraseña se manda UNA vez al entrar; a partir de ahí viaja un token
+// firmado con caducidad. Antes se guardaba en el navegador y se reenviaba en
+// cada petición.
+//
+// El token se firma con la propia contraseña: así no hay un tercer secreto que
+// configurar, y cambiarla invalida todas las sesiones abiertas, que es justo
+// lo que se quiere.
+
+const SESION_HORAS = 12;   // cubre una boda entera sin volver a entrar
+
+/** Comparación en tiempo constante. La longitud se filtra; es asumible. */
+function igualSeguro(a: string, b: string): boolean {
+  const ea = new TextEncoder().encode(a);
+  const eb = new TextEncoder().encode(b);
+  if (ea.length !== eb.length) return false;
+  let dif = 0;
+  for (let i = 0; i < ea.length; i++) dif |= ea[i]! ^ eb[i]!;
+  return dif === 0;
+}
+
+const b64url = {
+  cifrar: (datos: Uint8Array) =>
+    btoa(String.fromCharCode(...datos)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''),
+  descifrar: (txt: string) => {
+    const norm = txt.replace(/-/g, '+').replace(/_/g, '/');
+    return Uint8Array.from(atob(norm + '='.repeat((4 - norm.length % 4) % 4)), (c) => c.charCodeAt(0));
+  },
+};
+
+async function claveFirma(env: Env): Promise<CryptoKey> {
+  return crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(env.ADMIN_PASSWORD),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
+  );
+}
+
+async function emitirToken(env: Env, usuario: string): Promise<{ token: string; expira: number }> {
+  const expira = Date.now() + SESION_HORAS * 3600_000;
+  const carga = b64url.cifrar(new TextEncoder().encode(JSON.stringify({ u: usuario, exp: expira })));
+  const firma = await crypto.subtle.sign('HMAC', await claveFirma(env), new TextEncoder().encode(carga));
+  return { token: `${carga}.${b64url.cifrar(new Uint8Array(firma))}`, expira };
+}
+
+async function tokenValido(env: Env, token: string): Promise<boolean> {
+  const [carga, firma] = token.split('.');
+  if (!carga || !firma) return false;
+  try {
+    const ok = await crypto.subtle.verify(
+      'HMAC', await claveFirma(env), b64url.descifrar(firma), new TextEncoder().encode(carga),
+    );
+    if (!ok) return false;
+    const { exp } = JSON.parse(new TextDecoder().decode(b64url.descifrar(carga)));
+    return typeof exp === 'number' && Date.now() < exp;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Autenticación del panel. Falla cerrado: si el secreto no está configurado,
- * se rechaza todo en vez de dejar pasar `undefined === undefined`.
- *
- * El retardo en los fallos es freno a la fuerza bruta; la barrera real son los
- * ~72 bits de la contraseña.
+ * Autorización del panel. Falla cerrado: sin secretos configurados no pasa
+ * nadie, en vez de dejar colar `undefined === undefined`.
  */
 async function esAdmin(req: Request, env: Env): Promise<boolean> {
-  const esperada = env.ADMIN_PASSWORD;
-  if (typeof esperada !== 'string' || esperada.length === 0) return false;
-  const dada = req.headers.get('X-Admin-Password') ?? '';
-  if (dada === esperada) return true;
-  await new Promise((r) => setTimeout(r, 500));
-  return false;
+  if (typeof env.ADMIN_PASSWORD !== 'string' || env.ADMIN_PASSWORD.length === 0) return false;
+  const cabecera = req.headers.get('Authorization') ?? '';
+  if (!cabecera.startsWith('Bearer ')) return false;
+  return tokenValido(env, cabecera.slice(7));
+}
+
+/** Valida usuario y contraseña, y entrega la sesión. */
+async function login(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const usuarioOk = env.ADMIN_USER;
+  const claveOk = env.ADMIN_PASSWORD;
+  if (typeof usuarioOk !== 'string' || !usuarioOk || typeof claveOk !== 'string' || !claveOk) {
+    return error('acceso no configurado en el servidor', env, 503);
+  }
+
+  const usuario = typeof body?.usuario === 'string' ? body.usuario.trim() : '';
+  const clave = typeof body?.password === 'string' ? body.password : '';
+
+  // Se comprueban los dos SIEMPRE, para no revelar cuál falló por el tiempo.
+  const bienUsuario = igualSeguro(usuario.toLowerCase(), usuarioOk.toLowerCase());
+  const bienClave = igualSeguro(clave, claveOk);
+  if (!bienUsuario || !bienClave) {
+    await new Promise((r) => setTimeout(r, 500));   // freno a la fuerza bruta
+    return error('usuario o contraseña incorrectos', env, 401);
+  }
+
+  const { token, expira } = await emitirToken(env, usuario);
+  return json({ ok: true, token, expira, usuario }, env, 200, { 'Cache-Control': 'no-store' });
 }
 
 /** Respuesta del panel: nunca cacheada, ni por el navegador ni por el borde. */
@@ -551,9 +632,10 @@ export default {
       if (pathname === '/completar'   && req.method === 'POST') return await completar(req, env);
       if (pathname === '/borrar'      && req.method === 'POST') return await borrar(req, env);
 
+      if (pathname === '/admin/login' && req.method === 'POST') return await login(req, env);
+
       if (pathname.startsWith('/admin/')) {
         if (!(await esAdmin(req, env))) return error('no autorizado', env, 401);
-        if (pathname === '/admin/login'     && req.method === 'POST') return jsonAdmin({ ok: true }, env);
         if (pathname === '/admin/media'     && req.method === 'GET')  return await adminMedia(req, env);
         if (pathname === '/admin/stats'     && req.method === 'GET')  return await adminStats(req, env);
         if (pathname === '/admin/ocultar'   && req.method === 'POST') return await adminOcultar(req, env);

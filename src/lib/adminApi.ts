@@ -1,9 +1,8 @@
 /**
  * Cliente del panel de los novios.
  *
- * La contraseña viaja en la cabecera X-Admin-Password, no en el cuerpo: así
- * también sirve para peticiones GET. Sobre HTTPS es correcto; si algún día se
- * quiere endurecer, el paso siguiente sería un token firmado con caducidad.
+ * La contraseña se manda UNA vez al entrar; a partir de ahí viaja un token
+ * firmado con caducidad, que es lo único que se guarda en el navegador.
  */
 
 const PLAZO = 30_000;
@@ -37,9 +36,39 @@ export interface Estadisticas {
   almacenamiento: { bytes: number; objetos: number; limiteBytes: number };
 }
 
+export interface Sesion {
+  token: string;
+  expira: number;
+  usuario: string;
+}
+
 export class AdminApi {
-  constructor(private base: string, private password: string) {
+  private token = '';
+
+  constructor(private base: string) {
     this.base = base.replace(/\/$/, '');
+  }
+
+  usarToken(token: string) { this.token = token; }
+
+  /** Cambia usuario y contraseña por una sesión. Es la única vez que viaja la clave. */
+  async entrar(usuario: string, password: string): Promise<Sesion> {
+    const res = await fetch(`${this.base}/admin/login`, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, password }),
+    }).catch(() => null);
+
+    if (!res) throw new ErrorApi('Sin conexión.');
+    if (res.status === 401) throw new NoAutorizado('Usuario o contraseña incorrectos.');
+    if (!res.ok) {
+      const c = await res.json().catch(() => ({} as any));
+      throw new ErrorApi(c?.error ?? `Error ${res.status}`);
+    }
+    const datos = await res.json() as Sesion;
+    this.token = datos.token;
+    return datos;
   }
 
   private async pedir<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
@@ -53,7 +82,7 @@ export class AdminApi {
         cache: 'no-store',
         headers: {
           ...(opciones.body ? { 'Content-Type': 'application/json' } : {}),
-          'X-Admin-Password': this.password,
+          Authorization: `Bearer ${this.token}`,
           ...(opciones.headers ?? {}),
         },
       });
@@ -63,16 +92,12 @@ export class AdminApi {
       clearTimeout(reloj);
     }
 
-    if (res.status === 401) throw new NoAutorizado('Contraseña incorrecta.');
+    if (res.status === 401) throw new NoAutorizado('La sesión ha caducado.');
     if (!res.ok) {
       const cuerpo = await res.json().catch(() => ({} as any));
       throw new ErrorApi(cuerpo?.error ?? `Error ${res.status}`);
     }
     return res.json() as Promise<T>;
-  }
-
-  login() {
-    return this.pedir<{ ok: true }>('/admin/login', { method: 'POST' });
   }
 
   media(filtros: { origen?: string; estado?: string } = {}) {

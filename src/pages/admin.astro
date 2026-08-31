@@ -1,6 +1,12 @@
 ---
-// Panel de Aimar y Deborah. La URL no es adivinable y además pide contraseña,
-// que se valida al entrar (el panel viejo solo fallaba al primer clic).
+// Panel de Aimar y Deborah.
+//
+// Vive en /admin a propósito: la URL rara de antes era teatro de seguridad
+// desde que la contraseña se valida bien en el servidor, y lo único que
+// conseguía era que los novios no se acordaran de la dirección.
+//
+// El acceso es usuario + contraseña; a cambio se recibe un token firmado con
+// caducidad, que es lo único que se guarda en el navegador.
 ---
 <!doctype html>
 <html lang="es">
@@ -202,7 +208,10 @@
     <h1 class="acceso-titulo">Panel</h1>
     <p class="acceso-texto">Aimar &amp; Deborah</p>
     <div class="acceso-caja">
-      <input class="campo" type="password" id="clave" placeholder="Contraseña" autocomplete="current-password" enterkeyhint="go" />
+      <input class="campo" type="text" id="usuario" placeholder="Usuario"
+             autocomplete="username" autocapitalize="none" autocorrect="off" enterkeyhint="next" />
+      <input class="campo" type="password" id="clave" placeholder="Contraseña"
+             autocomplete="current-password" enterkeyhint="go" style="margin-top:.6rem" />
       <button class="boton ancho" id="entrar">Entrar</button>
       <p class="error-texto" id="accesoError"></p>
     </div>
@@ -215,6 +224,7 @@
       <div class="barra-acciones">
         <button class="icono-btn" id="btnSeleccion">Seleccionar</button>
         <button class="icono-btn" id="btnRecargar">Actualizar</button>
+        <button class="icono-btn" id="btnSalir">Salir</button>
       </div>
     </nav>
 
@@ -335,32 +345,64 @@
   let modoSel = false;
 
   // ── ACCESO ────────────────────────────────────────────────────────
-  async function entrar(clave: string) {
+  // En el navegador solo se guarda el token, nunca la contraseña.
+  const LLAVE = 'ad-sesion';
+
+  function abrirPanel() {
+    $('acceso').hidden = true;
+    $('panel').hidden = false;
+  }
+
+  function salir(motivo?: string) {
+    sessionStorage.removeItem(LLAVE);
+    $('panel').hidden = true;
+    $('acceso').hidden = false;
+    ($('clave') as HTMLInputElement).value = '';
+    $('accesoError').textContent = motivo ?? '';
+  }
+
+  async function entrar(usuario: string, clave: string) {
     const err = $('accesoError');
     err.textContent = '';
-    if (!clave) { err.textContent = 'Escribe la contraseña.'; return; }
+    if (!usuario || !clave) { err.textContent = 'Escribe usuario y contraseña.'; return; }
 
-    api = new AdminApi(API, clave);
     ($('entrar') as HTMLButtonElement).disabled = true;
     try {
-      await api.login();                       // se valida AL ENTRAR
-      sessionStorage.setItem('ad-pw', clave);
-      $('acceso').hidden = true;
-      $('panel').hidden = false;
+      const sesion = await api.entrar(usuario, clave);
+      sessionStorage.setItem(LLAVE, JSON.stringify(sesion));
+      abrirPanel();
       await recargar();
     } catch (e) {
-      err.textContent = e instanceof NoAutorizado ? 'Contraseña incorrecta.' : String((e as Error).message);
+      err.textContent = e instanceof NoAutorizado
+        ? 'Usuario o contraseña incorrectos.'
+        : String((e as Error).message);
     } finally {
       ($('entrar') as HTMLButtonElement).disabled = false;
     }
   }
-  $('entrar').addEventListener('click', () => entrar(($('clave') as HTMLInputElement).value.trim()));
-  $('clave').addEventListener('keydown', (e) => {
-    if ((e as KeyboardEvent).key === 'Enter') $('entrar').click();
-  });
 
-  const guardada = sessionStorage.getItem('ad-pw');
-  if (guardada) { ($('clave') as HTMLInputElement).value = guardada; entrar(guardada); }
+  api = new AdminApi(API);
+  $('entrar').addEventListener('click', () => entrar(
+    ($('usuario') as HTMLInputElement).value.trim(),
+    ($('clave') as HTMLInputElement).value,
+  ));
+  for (const id of ['usuario', 'clave']) {
+    $(id).addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') $('entrar').click();
+    });
+  }
+  $('btnSalir').addEventListener('click', () => salir());
+
+  // Retomar una sesión abierta, si no ha caducado.
+  try {
+    const guardada = JSON.parse(sessionStorage.getItem(LLAVE) ?? 'null');
+    if (guardada?.token && guardada.expira > Date.now()) {
+      api.usarToken(guardada.token);
+      ($('usuario') as HTMLInputElement).value = guardada.usuario ?? '';
+      abrirPanel();
+      recargar();
+    }
+  } catch { /* sesión ilegible: se pide entrar otra vez */ }
 
   // ── AVISOS ────────────────────────────────────────────────────────
   let avisoTimer: number;
@@ -381,6 +423,7 @@
       pintar();
       actualizarCuentas();
     } catch (e) {
+      if (e instanceof NoAutorizado) { salir('La sesión ha caducado. Entra otra vez.'); return; }
       avisar((e as Error).message);
     }
   }
@@ -709,7 +752,7 @@
     if (!lista.length) return;
 
     const categoria = ($('catSubida') as HTMLSelectElement).value;
-    const password = sessionStorage.getItem('ad-pw') ?? '';
+    const token = JSON.parse(sessionStorage.getItem(LLAVE) ?? '{}')?.token ?? '';
     $('progresoSubida').hidden = false;
     $('progresoTxt').textContent = `Preparando ${lista.length}…`;
 
@@ -717,7 +760,7 @@
     for (const f of lista) {
       try {
         const medio = await procesar(f);
-        await cola.encolar(medio, 'Reportaje', 'novios', { origen: 'oficial', categoria, password });
+        await cola.encolar(medio, 'Reportaje', 'novios', { origen: 'oficial', categoria, token });
       } catch (err) {
         fallos.push(err instanceof ErrorMedio ? err.message : `No se pudo leer «${f.name}».`);
       }

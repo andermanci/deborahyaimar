@@ -1,8 +1,10 @@
 import { chromium } from 'playwright';
 
 const BASE = 'http://127.0.0.1:4321';
-const PANEL = `${BASE}/admin-68895abc/`;
+const PANEL = `${BASE}/admin/`;
+const USUARIO = 'novios';
 const CLAVE = 'clave-de-prueba';
+const TOKEN = 'token-de-prueba.firma';
 const fallos = [];
 const ok = (m) => console.log(`  ✓ ${m}`);
 const mal = (m) => { fallos.push(m); console.log(`  ✗ ${m}`); };
@@ -16,22 +18,40 @@ const foto = (id, extra = {}) => ({
 let datos = [];
 const peticiones = [];
 
+/** El acceso ahora pide usuario y contraseña. */
+async function entrarEn(pg) {
+  await pg.fill('#usuario', USUARIO);
+  await pg.fill('#clave', CLAVE);
+  await pg.click('#entrar');
+}
+
 const nav = await chromium.launch({ channel: 'chrome' });
 const ctx = await nav.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 
 async function nuevaPagina() {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => mal(`error JS: ${e.message}`));
-  await page.route('**/admin/**', async (r) => {
+  // Ojo: el panel vive en /admin/, así que un glob '**/admin/**' interceptaría
+  // también la navegación a la página. Se enumeran las rutas de la API.
+  await page.route(/\/admin\/(login|media|stats|ocultar|eliminar|categoria|limpiar-parciales)\b/, async (r) => {
     const req = r.request();
-    const clave = req.headers()['x-admin-password'];
-    if (clave !== CLAVE) {
+    const url = new URL(req.url());
+    peticiones.push({ ruta: url.pathname, cuerpo: req.postData() ? JSON.parse(req.postData()) : null,
+                      auth: req.headers()['authorization'] });
+
+    if (url.pathname === '/admin/login') {
+      const c = JSON.parse(req.postData() ?? '{}');
+      if (c.usuario?.toLowerCase() !== USUARIO || c.password !== CLAVE) {
+        return r.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"usuario o contraseña incorrectos"}' });
+      }
+      return r.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ ok: true, token: TOKEN, expira: Date.now() + 3600_000, usuario: USUARIO }) });
+    }
+
+    // El resto exige el token de sesión, no la contraseña.
+    if (req.headers()['authorization'] !== `Bearer ${TOKEN}`) {
       return r.fulfill({ status: 401, contentType: 'application/json', body: '{"error":"no autorizado"}' });
     }
-    const url = new URL(req.url());
-    peticiones.push({ ruta: url.pathname, cuerpo: req.postData() ? JSON.parse(req.postData()) : null });
-
-    if (url.pathname === '/admin/login')  return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
     if (url.pathname === '/admin/media')  return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: datos, total: datos.length }) });
     if (url.pathname === '/admin/stats')  return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
       total: 4, visibles: 3, ocultas: 1, fotos: 2, videos: 1, invitados: 3, oficiales: 0, personas: 2,
@@ -53,17 +73,40 @@ console.log('\n1) Acceso');
   (await page.locator('#panel').isHidden()) ? ok('sin entrar, el panel está oculto') : mal('el panel se ve sin contraseña');
   (await page.locator('.celda').count()) === 0 ? ok('no se ve ninguna foto') : mal('¡se ven fotos sin contraseña!');
 
+  await page.fill('#usuario', USUARIO);
   await page.fill('#clave', 'incorrecta');
   await page.click('#entrar');
   await page.waitForTimeout(900);
-  const err = await page.locator('#accesoError').textContent();
-  err?.includes('incorrecta') ? ok('contraseña incorrecta → mensaje claro') : mal(`mensaje: "${err}"`);
-  (await page.locator('.celda').count()) === 0 ? ok('sigue sin mostrar fotos') : mal('mostró fotos con clave mala');
+  let err = await page.locator('#accesoError').textContent();
+  err?.includes('incorrectos') ? ok('contraseña mala → mensaje claro') : mal(`mensaje: "${err}"`);
 
+  await page.fill('#usuario', 'otro');
   await page.fill('#clave', CLAVE);
   await page.click('#entrar');
+  await page.waitForTimeout(900);
+  err = await page.locator('#accesoError').textContent();
+  err?.includes('incorrectos') ? ok('usuario malo → mismo mensaje (no revela cuál falló)') : mal(`mensaje: "${err}"`);
+  (await page.locator('.celda').count()) === 0 ? ok('sigue sin mostrar fotos') : mal('mostró fotos sin entrar');
+
+  await entrarEn(page);
   await page.waitForSelector('.celda', { timeout: 8000 });
-  ok('con la contraseña correcta entra');
+  ok('con usuario y contraseña correctos entra');
+
+  const guardado = await page.evaluate(() => sessionStorage.getItem('ad-sesion'));
+  guardado?.includes(TOKEN) && !guardado.includes(CLAVE)
+    ? ok('guarda el token, NO la contraseña')
+    : mal('guarda algo que no debe');
+
+  const conAuth = peticiones.filter((x) => x.ruta === '/admin/media');
+  conAuth.every((x) => x.auth === `Bearer ${TOKEN}`)
+    ? ok('las peticiones van con el token de sesión')
+    : mal('alguna petición no lleva el token');
+
+  await page.click('#btnSalir');
+  await page.waitForTimeout(400);
+  (await page.locator('#panel').isHidden()) ? ok('«Salir» cierra la sesión') : mal('no cierra sesión');
+  (await page.evaluate(() => sessionStorage.getItem('ad-sesion'))) === null
+    ? ok('y borra el token del navegador') : mal('deja el token guardado');
   await page.close();
 }
 
@@ -73,7 +116,7 @@ console.log('\n2) Papelera: ver y restaurar lo oculto');
   const page = await nuevaPagina();
   datos = [foto('v1'), foto('o1', { oculta: true, nombre: 'Jon' }), foto('o2', { oculta: true, nombre: 'Jon' })];
   await page.goto(PANEL, { waitUntil: 'networkidle' });
-  await page.fill('#clave', CLAVE); await page.click('#entrar');
+  await entrarEn(page);
   await page.waitForSelector('.celda', { timeout: 8000 });
 
   (await page.locator('.celda').count()) === 1 ? ok('en Invitados solo salen las visibles') : mal('mezcla ocultas con visibles');
@@ -106,7 +149,7 @@ console.log('\n3) Borrado definitivo');
   const page = await nuevaPagina();
   datos = [foto('vis'), foto('pap', { oculta: true })];
   await page.goto(PANEL, { waitUntil: 'networkidle' });
-  await page.fill('#clave', CLAVE); await page.click('#entrar');
+  await entrarEn(page);
   await page.waitForSelector('.celda', { timeout: 8000 });
 
   await page.click('#btnSeleccion');
@@ -151,7 +194,7 @@ console.log('\n4) Filtros');
     foto('f3', { nombre: 'Jon', tipo: 'video', duracion: 10, poster: `${BASE}/foto3.jpg` }),
   ];
   await page.goto(PANEL, { waitUntil: 'networkidle' });
-  await page.fill('#clave', CLAVE); await page.click('#entrar');
+  await entrarEn(page);
   await page.waitForSelector('.celda', { timeout: 8000 });
 
   await page.selectOption('#fQuien', 'Jon');
@@ -170,7 +213,7 @@ console.log('\n5) Resumen');
   const page = await nuevaPagina();
   datos = [foto('s1')];
   await page.goto(PANEL, { waitUntil: 'networkidle' });
-  await page.fill('#clave', CLAVE); await page.click('#entrar');
+  await entrarEn(page);
   await page.waitForSelector('.celda', { timeout: 8000 });
 
   await page.click('.seccion[data-vista="stats"]');
@@ -190,7 +233,7 @@ console.log('\n6) Subir el reportaje oficial');
   datos = [];
   let firmadoCon = null, completadoCon = null, claveFirmar = null;
   await page.route('**/firmar', async (r) => {
-    claveFirmar = r.request().headers()['x-admin-password'];
+    claveFirmar = r.request().headers()['authorization'];
     firmadoCon = JSON.parse(r.request().postData());
     await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'of', subidas: [
       { rol: 'thumb', key: 'oficial/of/thumb.webp', url: `${BASE}/__put/t` },
@@ -203,7 +246,7 @@ console.log('\n6) Subir el reportaje oficial');
   });
 
   await page.goto(PANEL, { waitUntil: 'networkidle' });
-  await page.fill('#clave', CLAVE); await page.click('#entrar');
+  await entrarEn(page);
   await page.waitForTimeout(700);
   await page.click('.seccion[data-vista="subir"]');
   await page.selectOption('#catSubida', 'baile');
@@ -214,7 +257,7 @@ console.log('\n6) Subir el reportaje oficial');
     .then(() => ok('la subida del reportaje se completa')).catch(() => mal('no completó'));
 
   firmadoCon?.origen === 'oficial' ? ok('pide firma con origen oficial') : mal(`origen: ${firmadoCon?.origen}`);
-  claveFirmar === CLAVE ? ok('manda la contraseña al firmar') : mal('no manda la contraseña');
+  claveFirmar === `Bearer ${TOKEN}` ? ok('manda el token de sesión al firmar') : mal(`autorización: ${claveFirmar}`);
   completadoCon?.origen === 'oficial' && completadoCon?.categoria === 'baile'
     ? ok('registra origen y categoría («baile»)')
     : mal(`completar: ${JSON.stringify({ o: completadoCon?.origen, c: completadoCon?.categoria })}`);
@@ -227,7 +270,7 @@ console.log('\n7) Descargar el álbum');
   const page = await nuevaPagina();
   datos = [foto('d1'), foto('d2'), foto('d3', { oculta: true })];
   await page.goto(PANEL, { waitUntil: 'networkidle' });
-  await page.fill('#clave', CLAVE); await page.click('#entrar');
+  await entrarEn(page);
   await page.waitForSelector('.celda', { timeout: 8000 });
 
   await page.click('.seccion[data-vista="descargar"]');

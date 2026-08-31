@@ -10,3 +10,11 @@
   to     = "/galeria/"
   status = 302
   force  = true
+
+# El panel vivía en una URL no adivinable; ahora está en /admin y el acceso lo
+# protege el login. Se redirige para no dejar muerto ningún enlace guardado.
+[[redirects]]
+  from   = "/admin-68895abc"
+  to     = "/admin/"
+  status = 301
+  force  = true

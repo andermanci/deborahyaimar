@@ -70,7 +70,7 @@ export interface ItemCola {
 export interface OpcionesSubida {
   origen?: 'invitado' | 'oficial';
   categoria?: string | null;
-  password?: string;   // el servidor exige contraseña si origen es 'oficial'
+  token?: string;   // sesión del panel; el servidor la exige si origen es 'oficial'
 }
 
 export interface ResumenCola {
@@ -325,7 +325,7 @@ export class ColaSubida {
 
   private cabeceras(item: ItemCola): Record<string, string> {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (item.opciones?.password) h['X-Admin-Password'] = item.opciones.password;
+    if (item.opciones?.token) h['Authorization'] = `Bearer ${item.opciones.token}`;
     return h;
   }
 
