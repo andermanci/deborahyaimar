@@ -94,10 +94,11 @@
     if (document.visibilityState === 'visible') mantenerDespierta();
   });
 
-  // Misma URL siempre: se sirve de la caché del borde, no golpea el Worker.
+  // Misma URL siempre (se sirve de la caché del borde) pero sin caché privada
+  // del navegador: si no, el mural se congela con las fotos de hace un rato.
   async function traer() {
     try {
-      const res = await fetch(`${API}/indice.json`);
+      const res = await fetch(`${API}/indice.json`, { cache: 'no-store' });
       if (!res.ok) return;
       const datos = await res.json();
       if (!Array.isArray(datos.items)) return;

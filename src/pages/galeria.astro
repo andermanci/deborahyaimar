@@ -703,12 +703,20 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     });
 
     // ── DATOS ─────────────────────────────────────────────────────
-    // Siempre la MISMA URL: la respuesta se sirve de la caché del borde.
-    // Un ?t=Date.now() la saltaría y recrearía el fallo que tumbaba la galería.
+    // Siempre la MISMA URL, y `no-store` para que el navegador no guarde copia.
+    //
+    // Sin no-store, Chrome se quedaba con la respuesta y la reservía una y otra
+    // vez (repitiendo hasta las cabeceras `age` y `cf-cache-status`), así que un
+    // invitado podía subir su foto y no verla aparecer nunca.
+    //
+    // Esto NO tumba la protección de carga: la petición llega al borde, que
+    // sigue sirviendo su copia de 15 s. Lo que se evita es la caché privada del
+    // navegador. Y la URL sigue sin cache-buster: un ?t=Date.now() sí saltaría
+    // la caché del borde y recrearía el fallo original.
     async function traer(origen: 'invitado' | 'oficial'): Promise<Item[] | null> {
       try {
         const url = origen === 'oficial' ? `${API}/indice.json?origen=oficial` : `${API}/indice.json`;
-        const res = await fetch(url);
+        const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return null;
         const datos = await res.json();
         return Array.isArray(datos.items) ? datos.items : null;

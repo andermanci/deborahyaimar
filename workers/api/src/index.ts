@@ -34,6 +34,7 @@ const TIPOS_OK: Record<string, number> = {
 
 const PART_SIZE = 5 * 1024 * 1024;   // mínimo de S3 para partes no finales
 const MAX_PARTES = 20;               // → 100 MB de vídeo como techo
+const TTL_INDICE = 15;               // segundos de frescura del índice
 const FIRMA_TTL = 6 * 3600;          // 6 h: una subida lenta jamás caduca a medias
 
 const ROLES = ['thumb', 'web', 'poster', 'video'] as const;
@@ -228,7 +229,20 @@ async function completar(req: Request, env: Env): Promise<Response> {
 async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const cache = caches.default;
   const cacheada = await cache.match(req);
-  if (cacheada) return cacheada;
+
+  // La frescura la decide el Worker mirando la edad, no la caché.
+  //
+  // Antes esto era `if (cacheada) return cacheada;` con
+  // `stale-while-revalidate` en la cabecera, y se formaba un bucle: el CDN
+  // servía una copia vieja y revalidaba por detrás; esa revalidación entraba
+  // aquí, encontraba la MISMA copia vieja en caches.default, la devolvía, y el
+  // CDN la reguardaba como fresca. La edad se quedaba clavada y la galería
+  // podía no actualizarse nunca: los invitados subían fotos y no las veían.
+  if (cacheada) {
+    const fecha = Date.parse(cacheada.headers.get('date') ?? '');
+    const edad = Number.isFinite(fecha) ? (Date.now() - fecha) / 1000 : Infinity;
+    if (edad < TTL_INDICE) return cacheada;
+  }
 
   const url = new URL(req.url);
   const origen = url.searchParams.get('origen') === 'oficial' ? 'oficial' : 'invitado';
@@ -259,14 +273,9 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
   }));
 
   const res = json({ items, total: items.length }, env, 200, {
-    // 15 s de frescura + 15 s sirviendo lo viejo mientras revalida.
-    //
-    // El SWR estaba en 60 s y era demasiado: el borde guarda varias copias con
-    // edades distintas, así que una foto recién subida podía tardar hasta 75 s
-    // en verse, y aparecer y desaparecer entre peticiones. En un muro que la
-    // gente mira en directo, eso se nota. Con 15+15 el peor caso son 30 s y
-    // seguimos cubiertos si D1 tarda en responder.
-    'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=15',
+    // max-age=0 para el NAVEGADOR, s-maxage para el CDN, y NADA de
+    // stale-while-revalidate. Ver la nota sobre el bucle de caché en indice().
+    'Cache-Control': `public, max-age=0, s-maxage=${TTL_INDICE}`,
   });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;
