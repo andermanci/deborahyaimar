@@ -11,6 +11,9 @@ npm test
 - `galeria.spec.mjs` — render, XSS del nombre, vídeo, lightbox, swipe, subida de foto.
 - `resiliencia.spec.mjs` — subida que falla, caída de red, cierre de pestaña a medias.
 - `video.spec.mjs` — multipart de vídeo y **reanudación** (que no reenvíe partes ya subidas).
+- `produccion.spec.mjs` — humo contra el sitio **real** (deborahyaimar.com + R2 + Worker).
+  No usa mocks: sube una foto de verdad. Ejecutar antes de la boda, y borrar
+  después la foto de prueba (nombre «Ensayo Claude») desde el panel de moderación.
 
 `resiliencia` y `video` usan relojes falsos (`page.clock.install`) para adelantar el
 backoff exponencial sin esperar minutos reales.
