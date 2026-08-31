@@ -39,7 +39,7 @@ Todo esto ya está creado, desplegado y verificado contra producción:
 | Base D1 `ad-galeria` | ✅ creada, esquema aplicado (colo MAD) |
 | Worker `ad-galeria-api` | ✅ desplegado |
 | `api.deborahyaimar.org` → Worker | ✅ conectado |
-| Secretos (`R2_*`, `ADMIN_PASSWORD`) | ✅ guardados |
+| Secretos (`R2_*`, `ADMIN_USER`, `ADMIN_PASSWORD`) | ✅ guardados |
 
 **Regla de caché para vídeo: NO hace falta.** Se comprobó empíricamente que Cloudflare ya
 cachea `.mp4` y `.webm` por defecto desde un dominio de R2 (MISS en la primera petición,
@@ -53,7 +53,7 @@ HIT en las siguientes). El paso que había aquí sobraba.
 - **Multipart de vídeo real contra R2**: 12 MB en 3 partes, ETags leídos correctamente
   (o sea, el CORS está bien), cierre del multipart, y el vídeo vuelve con 12,0 MB exactos
   sin corromperse. ✅
-- `/moderar` sin contraseña → 401. ✅
+- Todas las rutas `/admin/*` sin token → 401. ✅
 - Datos de prueba borrados; bucket e índice vacíos.
 
 ---
@@ -91,6 +91,37 @@ desde el panel de Cloudinary.
 
 ---
 
+## 4-ter. El panel de los novios
+
+**`deborahyaimar.com/admin`** · usuario `novios` · contraseña la de `ADMIN_PASSWORD`.
+
+Al entrar se recibe un token firmado con 12 h de caducidad; la contraseña no se guarda en
+el navegador ni se reenvía. El secreto `ADMIN_USER` define el usuario, y el token se firma
+con `ADMIN_PASSWORD`, así que **cambiar la contraseña invalida todas las sesiones abiertas**.
+
+Desde ahí: ver todo incluidas las ocultas, papelera con restaurar, borrado definitivo (que
+se lleva los bytes de R2), filtros, resumen con el espacio ocupado, subida del reportaje
+por categorías y descarga del álbum en ZIP.
+
+### Pendiente de un clic tuyo
+
+**Cron de limpieza nocturna.** El código está desplegado, pero Cloudflare no acepta
+programar crons hasta que la cuenta tenga subdominio `workers.dev`, que se crea solo al
+abrir el menú **Workers & Pages** una primera vez. Después:
+**Workers & Pages → ad-galeria-api → Settings → Triggers → Cron Triggers → Add** → `0 4 * * *`.
+
+Sin él no pasa nada grave: limpia subidas de vídeo abandonadas, y el panel tiene el mismo
+botón en «Resumen».
+
+**Regla de rate limiting en el login (recomendada).** `/firmar` es público por diseño y
+`/admin/login` ahora vive en una ruta adivinable. El plan gratuito incluye **una** regla:
+**Security → WAF → Rate limiting rules → Create**, con
+`http.request.uri.path eq "/admin/login"`, 10 peticiones / 10 segundos por IP, acción
+*Block* 1 minuto. Uso legítimo: dos peticiones en toda la boda, así que no molesta a nadie
+y cierra tanto la fuerza bruta como el riesgo de que alguien agote la cuota del Worker.
+
+---
+
 ## 5. El QR
 
 El QR impreso apunta a **`deborahyaimar.com/fotos`**, nunca a `/galeria` directamente.
@@ -109,9 +140,12 @@ curl -sI https://api.deborahyaimar.org/indice.json | grep -i cf-cache-status
 # Los vídeos se cachean (segunda llamada: HIT)
 curl -sI https://fotos.deborahyaimar.org/<una-clave>.webm | grep -i cf-cache-status
 
-# Moderar sin contraseña debe fallar
-curl -s -X POST https://api.deborahyaimar.org/moderar \
-  -H 'Content-Type: application/json' -d '{"id":"x"}'
+# El panel debe rechazar todo sin sesión
+curl -s -o /dev/null -w "%{http_code}\n" https://api.deborahyaimar.org/admin/media   # → 401
+
+# Y el login debe rechazar credenciales malas
+curl -s -X POST https://api.deborahyaimar.org/admin/login \
+  -H 'Content-Type: application/json' -d '{"usuario":"novios","password":"mal"}'
 ```
 
 **Si `cf-cache-status` nunca dice `HIT` en `/indice.json`, para y arréglalo antes de la

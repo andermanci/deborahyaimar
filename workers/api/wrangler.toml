@@ -9,6 +9,13 @@ compatibility_date = "2026-08-01"
 # wrangler exige el permiso Zone->Workers Routes en el token.
 workers_dev = false
 
+# Limpieza nocturna de subidas de vídeo abandonadas. /firmar es público por
+# diseño (los invitados no tienen cuenta), así que una petición de vídeo que
+# nunca se completa deja un multipart ocupando sitio en R2 sin aparecer en
+# ninguna parte. Sin esto, solo se limpiaban a mano desde el panel.
+[triggers]
+crons = ["0 4 * * *"]
+
 # Bucket público servido por fotos.deborahyaimar.org.
 # El Worker NO sirve los medios: solo firma las subidas y mantiene el índice.
 # Los bytes van del navegador a R2 y de R2 al navegador, sin pasar por aquí.

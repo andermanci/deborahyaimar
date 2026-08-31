@@ -414,18 +414,30 @@
     avisoTimer = window.setTimeout(() => el.classList.remove('visible'), 3600);
   }
 
+  /**
+   * Envoltorio de toda llamada a la API.
+   * Antes solo recargar() detectaba la sesión caducada; el resto de acciones
+   * enseñaban un aviso y te dejaban en un panel muerto sin forma clara de
+   * volver a entrar.
+   */
+  async function conSesion<T>(fn: () => Promise<T>): Promise<T | null> {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof NoAutorizado) { salir('La sesión ha caducado. Entra otra vez.'); return null; }
+      avisar((e as Error).message);
+      return null;
+    }
+  }
+
   // ── DATOS ─────────────────────────────────────────────────────────
   async function recargar() {
-    try {
-      const { items } = await api.media({ estado: 'todas' });
-      todo = items;
-      rellenarQuien();
-      pintar();
-      actualizarCuentas();
-    } catch (e) {
-      if (e instanceof NoAutorizado) { salir('La sesión ha caducado. Entra otra vez.'); return; }
-      avisar((e as Error).message);
-    }
+    const datos = await conSesion(() => api.media({ estado: 'todas' }));
+    if (!datos) return;
+    todo = datos.items;
+    rellenarQuien();
+    pintar();
+    actualizarCuentas();
   }
   $('btnRecargar').addEventListener('click', () => recargar());
 
@@ -602,16 +614,12 @@
   $('btnCancelarSel').addEventListener('click', () => { salirSeleccion(); pintar(); });
 
   async function accion(fn: () => Promise<unknown>, mensaje: string) {
-    const ids = [...seleccion];
-    if (!ids.length) return;
-    try {
-      await fn();
-      avisar(mensaje);
-      salirSeleccion();
-      await recargar();
-    } catch (e) {
-      avisar((e as Error).message);
-    }
+    if (!seleccion.size) return;
+    const hecho = await conSesion(fn);
+    if (hecho === null) return;
+    avisar(mensaje);
+    salirSeleccion();
+    await recargar();
   }
 
   $('btnOcultar').addEventListener('click', () =>
@@ -673,8 +681,9 @@
   }
 
   async function pintarStats() {
-    try {
-      const s = await api.stats();
+    const s = await conSesion(() => api.stats());
+    if (!s) return;
+    {
       $('tarjetasStats').replaceChildren(
         tarjeta(String(s.visibles), 'en la galería'),
         tarjeta(String(s.fotos), 'fotos'),
@@ -720,17 +729,14 @@
       const txt = $('medidorTxt');
       txt.textContent = `${gb} GB de 10 GB gratuitos · ${objetos} archivos (${pct.toFixed(1)} %)`;
       txt.classList.toggle('aviso', pct > 80);
-    } catch (e) {
-      avisar((e as Error).message);
     }
   }
 
   $('btnLimpiar').addEventListener('click', async () => {
-    try {
-      const r = await api.limpiarParciales();
-      avisar(r.limpiadas ? `${r.limpiadas} subidas incompletas limpiadas` : 'No había nada que limpiar');
-      await pintarStats();
-    } catch (e) { avisar((e as Error).message); }
+    const r = await conSesion(() => api.limpiarParciales());
+    if (!r) return;
+    avisar(r.limpiadas ? `${r.limpiadas} subidas incompletas limpiadas` : 'No había nada que limpiar');
+    await pintarStats();
   });
 
   // ── SUBIR REPORTAJE ───────────────────────────────────────────────

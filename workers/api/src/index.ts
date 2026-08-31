@@ -441,7 +441,7 @@ async function borrar(req: Request, env: Env): Promise<Response> {
 }
 
 // ══ PANEL DE LOS NOVIOS ═══════════════════════════════════════════════
-// Todo bajo /admin/* exige la cabecera X-Admin-Password y responde sin caché:
+// Todo bajo /admin/* exige un token de sesión (Authorization: Bearer) y
 // el panel jamás debe ver datos viejos.
 
 /** Lee y valida una lista de ids del cuerpo. */
@@ -599,7 +599,7 @@ async function adminStats(req: Request, env: Env): Promise<Response> {
 // ── POST /admin/limpiar-parciales ─────────────────────────────────────
 // Vídeos que se quedaron a medias dejan trozos ocupando sitio en R2 sin
 // aparecer en ninguna parte.
-async function adminLimpiarParciales(_req: Request, env: Env): Promise<Response> {
+async function limpiarParciales(env: Env): Promise<number> {
   const limite = Date.now() - 24 * 3600_000;
   const { results } = await env.DB.prepare(
     'select id, key, upload_id from subidas_parciales where created_at < ?'
@@ -612,12 +612,23 @@ async function adminLimpiarParciales(_req: Request, env: Env): Promise<Response>
     ).catch(() => {});
     await env.DB.prepare('delete from subidas_parciales where id = ?').bind(f.id).run();
   }
-  return jsonAdmin({ ok: true, limpiadas: filas.length }, env);
+  return filas.length;
+}
+
+async function adminLimpiarParciales(_req: Request, env: Env): Promise<Response> {
+  return jsonAdmin({ ok: true, limpiadas: await limpiarParciales(env) }, env);
 }
 
 // ── Router ────────────────────────────────────────────────────────────
 
 export default {
+  /** Cron nocturno: se lleva los multipart abandonados de hace más de 24 h. */
+  async scheduled(_evento: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(limpiarParciales(env).then((n) => {
+      if (n) console.log(`limpiadas ${n} subidas incompletas`);
+    }));
+  },
+
   async fetch(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(req.url);
 
