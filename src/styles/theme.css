@@ -1,0 +1,51 @@
+/* Tokens compartidos por todas las páginas.
+   Antes cada página definía los suyos y --cream difería entre index (#FAFAF7)
+   y galeria (#FAF8F4). Aquí queda un único valor. */
+
+@font-face {
+  font-family: 'Sloop';
+  src: url('/fonts/Sloop-ScriptThree.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --cream: #FAF8F4;
+  --blush: #F5E5ED;
+  --rose: #E8C5D2;
+  --pink: #F2B3CE;
+  --pink-deep: #C8829E;
+  --pink-label: #F4BCCE;
+  --dark: #1a1a1a;
+  --black: #111111;
+  --gray: #8a7070;
+  --gray-neutro: #888;
+  --gray-light: #e8e8e5;
+  --border: #e6d8dc;
+  --ok: #4a9d6e;
+  --err: #c25b5b;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--cream);
+  color: var(--dark);
+  font-family: 'Raleway', sans-serif;
+  font-weight: 300;
+  font-size: 16px;
+  line-height: 1.65;
+  letter-spacing: 0.03em;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

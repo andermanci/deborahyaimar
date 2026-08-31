@@ -25,3 +25,12 @@ pnpm-debug.log*
 
 # jetbrains setting folder
 .idea/
+
+# Cloudflare (estado local de wrangler)
+.wrangler/
+
+# Netlify (estado local del CLI)
+.netlify/
+
+# Fuentes de diseño (duplican assets/, no van al repo)
+Entregables para web A&D/

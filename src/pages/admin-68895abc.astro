@@ -1,0 +1,140 @@
+---
+// Panel de moderación. La URL no es adivinable y además pide contraseña.
+// Pensado para usarse desde el móvil, a oscuras y con prisa.
+---
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Moderar · A&D</title>
+  <link href="https://fonts.googleapis.com/css2?family=Raleway:wght@200;300;400&display=swap" rel="stylesheet" />
+  <style is:global>@import '../styles/theme.css';</style>
+  <style is:global>
+    body { background: #111; color: #fff; padding: 1.5rem 1rem 4rem; }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    h1 { font-size: 0.7rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--pink); margin-bottom: 1.5rem; }
+    .clave { display: flex; gap: 0.5rem; margin-bottom: 2rem; }
+    .clave input {
+      flex: 1; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15);
+      color: #fff; padding: 0.8rem 1rem; border-radius: 3px; font-family: inherit; font-size: 1rem;
+    }
+    .clave button {
+      background: var(--pink); border: none; color: #111; padding: 0.8rem 1.4rem;
+      border-radius: 3px; font-family: inherit; font-size: 0.7rem;
+      letter-spacing: 0.18em; text-transform: uppercase; cursor: pointer;
+    }
+    .rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+    .celda { position: relative; aspect-ratio: 1; background: #222; border-radius: 3px; overflow: hidden; }
+    .celda img { width: 100%; height: 100%; object-fit: cover; }
+    .celda.oculta img { opacity: 0.25; filter: grayscale(1); }
+    .celda button {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,0.75); border: none; color: #fff;
+      padding: 0.6rem; font-family: inherit; font-size: 0.6rem;
+      letter-spacing: 0.14em; text-transform: uppercase; cursor: pointer;
+    }
+    .celda.oculta button { background: rgba(120,200,150,0.35); }
+    .quien {
+      position: absolute; top: 0; left: 0; right: 0; padding: 0.35rem 0.5rem;
+      background: linear-gradient(rgba(0,0,0,0.7), transparent);
+      font-size: 0.6rem; color: rgba(255,255,255,0.85);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .aviso { font-size: 0.8rem; color: rgba(255,255,255,0.5); line-height: 1.8; }
+    .aviso.error { color: #e07d7d; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Aimar & Deborah · Moderar</h1>
+    <div class="clave" id="clave">
+      <input type="password" id="pw" placeholder="Contraseña" autocomplete="current-password" />
+      <button id="entrar">Entrar</button>
+    </div>
+    <p class="aviso" id="aviso">Introduce la contraseña para ver las fotos.</p>
+    <div class="rejilla" id="rejilla"></div>
+  </div>
+
+<script>
+  const API = import.meta.env.PUBLIC_API_BASE ?? '';
+  const $ = (id: string) => document.getElementById(id)!;
+  const rejilla = $('rejilla');
+  const aviso = $('aviso');
+  let pw = sessionStorage.getItem('ad-pw') ?? '';
+
+  interface Item { id: string; nombre: string; thumb: string; poster: string | null; tipo: string; }
+
+  async function cargar() {
+    aviso.textContent = 'Cargando…';
+    aviso.classList.remove('error');
+    try {
+      const res = await fetch(`${API}/indice.json`);
+      const datos = await res.json();
+      pintar(datos.items ?? []);
+      aviso.textContent = `${datos.items.length} fotos de invitados. Toca para ocultar.`;
+    } catch {
+      aviso.textContent = 'No se pudo cargar el índice.';
+      aviso.classList.add('error');
+    }
+  }
+
+  function pintar(items: Item[]) {
+    rejilla.replaceChildren();
+    for (const item of items) {
+      const celda = document.createElement('div');
+      celda.className = 'celda';
+
+      const img = document.createElement('img');
+      img.src = item.poster ?? item.thumb;
+      img.loading = 'lazy';
+      celda.appendChild(img);
+
+      if (item.nombre) {
+        const quien = document.createElement('span');
+        quien.className = 'quien';
+        quien.textContent = item.nombre;   // texto plano: lo escribe un invitado
+        celda.appendChild(quien);
+      }
+
+      const boton = document.createElement('button');
+      boton.textContent = 'Ocultar';
+      boton.addEventListener('click', async () => {
+        boton.disabled = true;
+        boton.textContent = '…';
+        const res = await fetch(`${API}/moderar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw, id: item.id, ocultar: true }),
+        });
+        if (res.ok) {
+          celda.classList.add('oculta');
+          boton.textContent = 'Oculta';
+        } else {
+          boton.disabled = false;
+          boton.textContent = 'Error';
+          aviso.textContent = res.status === 401
+            ? 'Contraseña incorrecta.'
+            : 'No se pudo ocultar. Reintenta.';
+          aviso.classList.add('error');
+        }
+      });
+      celda.appendChild(boton);
+      rejilla.appendChild(celda);
+    }
+  }
+
+  $('entrar').addEventListener('click', () => {
+    pw = ($('pw') as HTMLInputElement).value;
+    sessionStorage.setItem('ad-pw', pw);
+    cargar();
+  });
+  $('pw').addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') $('entrar').click();
+  });
+
+  if (pw) { ($('pw') as HTMLInputElement).value = pw; cargar(); }
+</script>
+</body>
+</html>

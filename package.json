@@ -9,9 +9,14 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "astro": "astro"
+    "astro": "astro",
+    "test": "node tests/galeria.spec.mjs && node tests/resiliencia.spec.mjs && node tests/video.spec.mjs && node tests/mural-admin.spec.mjs"
   },
   "dependencies": {
     "astro": "^6.1.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.2",
+    "playwright": "^1.62.1"
   }
 }

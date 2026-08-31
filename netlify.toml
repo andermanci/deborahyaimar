@@ -2,11 +2,11 @@
   command   = "npm run build"
   publish   = "dist"
 
-  # PUBLIC_CLOUDINARY_* son variables intencionalmente públicas (se incrustan
-  # en el bundle del cliente para que el navegador suba fotos a Cloudinary).
-  # El cloud name y el upload preset no son secretos — es el diseño de la API.
-  [build.environment]
-    SECRETS_SCAN_OMIT_KEYS = "PUBLIC_CLOUDINARY_CLOUD_NAME,PUBLIC_CLOUDINARY_PRESET,CLOUDINARY_CLOUD_NAME"
-
-[functions]
-  directory = "netlify/functions"
+# El QR impreso apunta SIEMPRE aquí, nunca a /galeria directamente.
+# Si algo falla el día de la boda, se cambia este destino en un despliegue
+# de 30 segundos sin tener que reimprimir nada.
+[[redirects]]
+  from   = "/fotos"
+  to     = "/galeria/"
+  status = 302
+  force  = true

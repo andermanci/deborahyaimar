@@ -1,6 +1,5 @@
 ---
-const cloudName = import.meta.env.PUBLIC_CLOUDINARY_CLOUD_NAME ?? '';
-const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
+const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 ---
 <!doctype html>
 <html lang="es">
@@ -9,29 +8,14 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
   <link rel="icon" href="/logo-positivo.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="Galería — Aimar & Deborah · 12 · 09 · 2026" />
+  <meta name="robots" content="noindex" />
   <title>Fotos · Aimar & Deborah</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  {mediaBase && <link rel="preconnect" href={mediaBase} />}
   <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,200;0,300;0,400;0,500;1,200;1,300&display=swap" rel="stylesheet" />
+  <style is:global>@import '../styles/theme.css';</style>
   <style is:global>
-    @font-face {
-      font-family: 'Sloop';
-      src: url('/fonts/Sloop-ScriptThree.ttf') format('truetype');
-      font-weight: normal; font-style: normal; font-display: swap;
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root {
-      --cream: #FAF8F4; --blush: #F5E5ED; --rose: #E8C5D2;
-      --pink: #F2B3CE; --dark: #1a1a1a; --gray: #8a7070; --border: #e6d8dc;
-    }
-    html { scroll-behavior: smooth; }
-    body {
-      background: var(--cream); color: var(--dark);
-      font-family: 'Raleway', sans-serif; font-weight: 300;
-      font-size: 16px; line-height: 1.65; letter-spacing: 0.03em;
-      -webkit-font-smoothing: antialiased;
-    }
-
     /* NAV */
     nav {
       position: sticky; top: 0; z-index: 100;
@@ -64,109 +48,119 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       color: var(--pink); margin-bottom: 1rem;
     }
     .gl-title {
-      font-family: 'Sloop', cursive;
-      font-size: clamp(2.8rem, 7vw, 4.5rem);
-      font-weight: normal; color: var(--dark);
-      line-height: 1.1; margin-bottom: 0.8rem;
+      font-family: 'Sloop', cursive; font-size: clamp(2.8rem, 7vw, 4.5rem);
+      font-weight: normal; color: var(--dark); line-height: 1.1; margin-bottom: 0.8rem;
     }
     .gl-sub { font-size: 0.82rem; color: var(--gray); letter-spacing: 0.1em; }
 
     /* TABS */
     .gl-tabs {
-      display: flex; justify-content: center; flex-wrap: wrap;
-      border-bottom: 1px solid var(--border); padding: 0 1.5rem;
+      display: flex; justify-content: flex-start; overflow-x: auto;
+      border-bottom: 1px solid var(--border); padding: 0 1rem;
       position: sticky; top: 56px; z-index: 90;
       background: rgba(250,248,244,0.95); backdrop-filter: blur(10px);
+      scrollbar-width: none;
     }
+    .gl-tabs::-webkit-scrollbar { display: none; }
+    @media (min-width: 720px) { .gl-tabs { justify-content: center; } }
     .gl-tab {
       font-size: 0.63rem; letter-spacing: 0.16em; text-transform: uppercase;
-      color: var(--gray); padding: 0.9rem 1.2rem;
+      color: var(--gray); padding: 0.9rem 1.1rem; white-space: nowrap;
       cursor: pointer; border: none; background: none;
       border-bottom: 2px solid transparent; margin-bottom: -1px;
       transition: color 0.2s, border-color 0.2s; font-family: inherit;
     }
     .gl-tab:hover { color: var(--dark); }
     .gl-tab.active { color: var(--dark); border-bottom-color: var(--pink); }
-    .gl-tab[data-cat="invitados"].active { border-bottom-color: var(--rose); color: var(--gray); }
-    .gl-tab[data-cat="invitados"] { color: var(--pink); }
+    .gl-tab[hidden] { display: none; }
 
     /* GRID */
-    .gl-grid-wrap { padding: 3rem 1.5rem 5rem; max-width: 1200px; margin: 0 auto; }
+    .gl-grid-wrap { padding: 2.5rem 1rem 5rem; max-width: 1200px; margin: 0 auto; }
+    .gl-grid { column-count: 2; column-gap: 4px; }
+    @media (min-width: 480px)  { .gl-grid { column-count: 3; } }
+    @media (min-width: 720px)  { .gl-grid { column-count: 4; } }
+    @media (min-width: 1000px) { .gl-grid { column-count: 5; } }
 
-    /* Modo cuadrícula (fotos oficiales) */
-    .gl-grid[data-layout="grid"] {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 2px;
-    }
-    .gl-item { aspect-ratio: 1; overflow: hidden; background: var(--blush); cursor: pointer; }
-    .gl-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
-    .gl-item:hover img { transform: scale(1.04); }
-
-    /* Modo masonry (fotos invitados) */
-    .gl-grid[data-layout="masonry"] {
-      column-count: 2;
-      column-gap: 4px;
-    }
-    @media (min-width: 480px)  { .gl-grid[data-layout="masonry"] { column-count: 3; } }
-    @media (min-width: 720px)  { .gl-grid[data-layout="masonry"] { column-count: 4; } }
-    @media (min-width: 1000px) { .gl-grid[data-layout="masonry"] { column-count: 5; } }
-
-    .inv-item {
-      -webkit-column-break-inside: avoid;
-      break-inside: avoid;
-      margin-bottom: 4px;
-      position: relative; cursor: pointer; overflow: hidden;
-      background: var(--rose);
+    .gl-item {
+      -webkit-column-break-inside: avoid; break-inside: avoid;
+      margin-bottom: 4px; position: relative; cursor: pointer;
+      overflow: hidden; background: var(--rose);
       animation: fadeIn 0.35s ease both;
     }
-    .inv-item img { width: 100%; display: block; transition: transform 0.4s; }
-    .inv-item:hover img { transform: scale(1.04); }
-    .inv-item-name {
-      position: absolute; bottom: 0; left: 0; right: 0;
-      padding: 0.35rem 0.6rem;
-      background: linear-gradient(transparent, rgba(10,3,3,0.45));
-      font-size: 0.58rem; letter-spacing: 0.1em; color: rgba(255,255,255,0.75);
+    .gl-item img { width: 100%; display: block; transition: transform 0.4s; }
+    .gl-item:hover img { transform: scale(1.04); }
+    .gl-item-name {
+      position: absolute; bottom: 0; left: 0; right: 0; padding: 0.35rem 0.6rem;
+      background: linear-gradient(transparent, rgba(10,3,3,0.55));
+      font-size: 0.58rem; letter-spacing: 0.1em; color: rgba(255,255,255,0.85);
       opacity: 0; transition: opacity 0.25s;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
-    .inv-item:hover .inv-item-name { opacity: 1; }
+    .gl-item:hover .gl-item-name { opacity: 1; }
+    @media (hover: none) { .gl-item-name { opacity: 1; } }
+
+    .gl-play {
+      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .gl-play span {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 0.7rem; padding-left: 3px;
+    }
+    .gl-dur {
+      position: absolute; top: 6px; right: 6px;
+      background: rgba(0,0,0,0.55); color: #fff;
+      font-size: 0.55rem; letter-spacing: 0.06em;
+      padding: 1px 5px; border-radius: 2px;
+    }
 
     /* Estado vacío */
     .gl-empty {
-      display: flex; flex-direction: column; align-items: center;
-      justify-content: center; padding: 6rem 2rem; text-align: center;
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      padding: 5rem 2rem; text-align: center;
     }
-    .gl-grid[data-layout="grid"] .gl-empty { grid-column: 1 / -1; }
-    .gl-grid[data-layout="masonry"] .gl-empty { column-span: all; }
+    .gl-empty.visible { display: flex; }
     .gl-empty-icon { width: 52px; height: 52px; margin-bottom: 2rem; color: var(--rose); }
     .gl-empty-title {
       font-size: 1rem; font-weight: 300; letter-spacing: 0.12em;
       text-transform: uppercase; color: var(--dark); margin-bottom: 0.8rem;
     }
     .gl-empty-sub { font-size: 0.82rem; color: var(--gray); max-width: 340px; line-height: 1.8; }
-    .gl-date-badge {
-      display: inline-block; margin-top: 1.5rem;
-      font-size: 0.62rem; letter-spacing: 0.2em; text-transform: uppercase;
-      color: var(--pink); border: 1px solid var(--rose); padding: 0.4rem 1.2rem; border-radius: 50px;
-    }
 
-    /* Refresh bar (invitados) */
-    .inv-refresh {
+    .gl-estado {
       text-align: center; margin-top: 1.5rem;
       font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
-      color: var(--gray); opacity: 0.6; display: none;
+      color: var(--gray); opacity: 0.6;
     }
-    .inv-refresh span { color: var(--pink); }
+    .gl-estado span { color: var(--pink); }
 
-    /* ── UPLOAD SECTION ──────────────────────────────────────────── */
-    .upload-section {
-      background: var(--blush);
-      border-top: 1px solid var(--border);
-      padding: 5rem 1.5rem;
+    /* LIGHTBOX */
+    .lightbox {
+      display: none; position: fixed; inset: 0; z-index: 1000;
+      background: rgba(12,4,4,0.96); align-items: center; justify-content: center;
+      touch-action: pan-y;
     }
+    .lightbox.open { display: flex; }
+    .lightbox img, .lightbox video { max-width: 92vw; max-height: 88vh; object-fit: contain; }
+    .lb-close, .lb-prev, .lb-next {
+      position: absolute; background: none; border: none; color: #fff; cursor: pointer;
+      transition: opacity 0.2s; opacity: 0.5;
+    }
+    .lb-close { top: 1rem; right: 1.2rem; font-size: 1.5rem; padding: 0.5rem; }
+    .lb-prev, .lb-next { top: 50%; transform: translateY(-50%); font-size: 2.4rem; padding: 1rem 0.8rem; }
+    .lb-prev { left: 0; } .lb-next { right: 0; }
+    .lb-close:hover, .lb-prev:hover, .lb-next:hover { opacity: 1; }
+    .lb-caption {
+      position: absolute; bottom: 1.2rem; left: 0; right: 0; text-align: center;
+      color: rgba(255,255,255,0.65); font-size: 0.68rem; letter-spacing: 0.12em;
+    }
+
+    /* UPLOAD */
+    .upload-section { background: var(--blush); border-top: 1px solid var(--border); padding: 4rem 1.5rem; }
     .upload-inner { max-width: 480px; margin: 0 auto; }
-    .upload-header { text-align: center; margin-bottom: 2.5rem; }
+    .upload-header { text-align: center; margin-bottom: 2rem; }
     .upload-eyebrow {
       font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
       color: var(--pink); margin-bottom: 0.8rem;
@@ -175,81 +169,48 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
       font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 200;
       letter-spacing: 0.18em; text-transform: uppercase; color: var(--dark);
     }
-
     .uf-label {
       font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
       color: var(--gray); display: block; margin-bottom: 0.4rem;
     }
     .uf-input {
-      width: 100%; background: #fff;
-      border: 1px solid var(--border); border-radius: 2px;
-      color: var(--dark); font-family: inherit; font-size: 0.9rem; font-weight: 300;
+      width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 2px;
+      color: var(--dark); font-family: inherit; font-size: 1rem; font-weight: 300;
       padding: 0.75rem 1rem; transition: border-color 0.2s; margin-bottom: 1rem;
     }
     .uf-input:focus { outline: none; border-color: var(--pink); }
-    .uf-input::placeholder { color: rgba(26,26,26,0.3); }
     .uf-dropzone {
       border: 1px dashed var(--border); border-radius: 2px;
       padding: 2rem 1.5rem; text-align: center; cursor: pointer;
       transition: border-color 0.2s, background 0.2s; position: relative;
       background: #fff; margin-bottom: 1rem;
     }
-    .uf-dropzone:hover, .uf-dropzone.drag-over {
-      border-color: var(--pink); background: rgba(242,179,206,0.06);
-    }
-    .uf-dropzone input[type="file"] {
-      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
-    }
+    .uf-dropzone:hover, .uf-dropzone.drag-over { border-color: var(--pink); background: rgba(242,179,206,0.06); }
+    .uf-dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
     .uf-dz-icon { color: var(--pink); margin-bottom: 0.7rem; }
     .uf-dz-text { font-size: 0.82rem; color: var(--gray); line-height: 1.6; }
-    .uf-dz-count { font-size: 0.72rem; color: var(--pink); margin-top: 0.4rem; min-height: 1.1em; }
-    .uf-progress-wrap {
-      display: none; background: var(--border); border-radius: 2px;
-      height: 3px; margin-bottom: 1rem; overflow: hidden;
-    }
-    .uf-progress-bar { height: 100%; background: var(--pink); width: 0; transition: width 0.15s; }
+    .uf-dz-hint { font-size: 0.68rem; color: var(--gray); opacity: 0.7; margin-top: 0.3rem; }
     .uf-submit {
       width: 100%; background: var(--dark); border: none; border-radius: 2px;
-      color: #fff; font-family: inherit;
-      font-size: 0.72rem; letter-spacing: 0.22em; text-transform: uppercase;
-      font-weight: 400; padding: 0.9rem 2rem; cursor: pointer; transition: opacity 0.2s;
+      color: #fff; font-family: inherit; font-size: 0.72rem; letter-spacing: 0.22em;
+      text-transform: uppercase; font-weight: 400; padding: 0.9rem 2rem;
+      cursor: pointer; transition: opacity 0.2s;
     }
-    .uf-submit:hover { opacity: 0.8; }
+    .uf-submit:hover { opacity: 0.85; }
     .uf-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-    .upload-ok {
-      display: none; text-align: center; padding: 2rem 0;
-    }
-    .upload-ok p { font-size: 0.88rem; color: var(--dark); letter-spacing: 0.06em; }
-    .upload-ok .ok-sub { color: var(--gray); font-size: 0.75rem; margin-top: 0.4rem; }
-    .upload-again {
-      display: inline-block; margin-top: 1.2rem;
-      font-size: 0.62rem; letter-spacing: 0.15em; text-transform: uppercase;
-      color: var(--pink); cursor: pointer; border-bottom: 1px solid var(--rose);
-    }
 
-    /* Lightbox */
-    .lightbox {
-      display: none; position: fixed; inset: 0; z-index: 1000;
-      background: rgba(12,4,4,0.96);
-      align-items: center; justify-content: center;
+    /* Estado de la cola: honesto y permanente */
+    .uf-cola { margin-top: 1.2rem; font-size: 0.75rem; color: var(--gray); text-align: center; }
+    .uf-cola.tiene-fallos { color: var(--err); }
+    .uf-barra { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 0.8rem; }
+    .uf-barra span { display: block; height: 100%; background: var(--pink); width: 0; transition: width 0.3s; }
+    .uf-reintentar {
+      margin-top: 0.6rem; background: none; border: none; cursor: pointer;
+      font-family: inherit; font-size: 0.65rem; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--err); border-bottom: 1px solid currentColor;
     }
-    .lightbox.open { display: flex; }
-    .lightbox img { max-width: 90vw; max-height: 90vh; object-fit: contain; }
-    .lb-close {
-      position: absolute; top: 1.2rem; right: 1.5rem;
-      font-size: 1.4rem; color: #fff; cursor: pointer;
-      background: none; border: none; opacity: 0.5; transition: opacity 0.2s;
-    }
-    .lb-close:hover { opacity: 1; }
-    .lb-prev, .lb-next {
-      position: absolute; top: 50%; transform: translateY(-50%);
-      background: none; border: none; color: #fff; font-size: 2rem;
-      cursor: pointer; opacity: 0.35; padding: 1rem; transition: opacity 0.2s;
-    }
-    .lb-prev:hover, .lb-next:hover { opacity: 1; }
-    .lb-prev { left: 0.2rem; } .lb-next { right: 0.2rem; }
+    .uf-errores { margin-top: 0.6rem; font-size: 0.68rem; color: var(--err); line-height: 1.5; }
 
-    /* Footer */
     footer {
       background: var(--dark); text-align: center; padding: 2rem 1.5rem;
       color: rgba(255,255,255,0.25); font-size: 0.72rem; letter-spacing: 0.1em;
@@ -260,37 +221,26 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
 
     /* PRE-BODA */
     .pre-wrap {
-      min-height: calc(100vh - 56px);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      text-align: center; padding: 4rem 1.5rem;
+      min-height: calc(100vh - 56px); display: flex; flex-direction: column;
+      align-items: center; justify-content: center; text-align: center; padding: 4rem 1.5rem;
     }
     .pre-eyebrow {
       font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
       color: var(--pink); margin-bottom: 1.2rem;
     }
     .pre-title {
-      font-family: 'Sloop', cursive;
-      font-size: clamp(2.8rem, 8vw, 5rem);
-      font-weight: normal; color: var(--dark);
-      line-height: 1.1; margin-bottom: 1.4rem;
+      font-family: 'Sloop', cursive; font-size: clamp(2.8rem, 8vw, 5rem);
+      font-weight: normal; color: var(--dark); line-height: 1.1; margin-bottom: 1.4rem;
     }
     .pre-deco { width: 40px; height: 1px; background: var(--rose); margin: 0 auto 2rem; }
-    .pre-text {
-      font-size: 0.88rem; color: var(--gray); line-height: 1.9;
-      max-width: 380px; margin-bottom: 3rem;
-    }
+    .pre-text { font-size: 0.88rem; color: var(--gray); line-height: 1.9; max-width: 380px; margin-bottom: 3rem; }
     .pre-countdown {
       display: flex; align-items: center; flex-wrap: wrap; justify-content: center;
       gap: 0.6rem 1rem; margin-bottom: 2.5rem; max-width: 360px;
     }
     .pre-cd-block { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-width: 56px; }
-    .pre-cd-num {
-      font-size: clamp(1.8rem, 8vw, 3rem); font-weight: 200;
-      letter-spacing: 0.05em; color: var(--dark); line-height: 1;
-    }
-    .pre-cd-label {
-      font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray);
-    }
+    .pre-cd-num { font-size: clamp(1.8rem, 8vw, 3rem); font-weight: 200; letter-spacing: 0.05em; color: var(--dark); line-height: 1; }
+    .pre-cd-label { font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray); }
     .pre-cd-sep { font-size: 1.2rem; color: var(--rose); margin-bottom: 1rem; }
     @media (max-width: 380px) { .pre-cd-sep { display: none; } }
     .pre-badge {
@@ -302,26 +252,26 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
 <body>
 
   <nav>
-    <a href="javascript:history.back()" class="nav-back">← volver</a>
+    <!-- href real, no history.back(): los invitados llegan por QR, sin historial. -->
+    <a href="/" class="nav-back">← inicio</a>
     <img src="/logo-positivo.png" alt="A&D" class="nav-logo" />
-    <a href="#subir" class="nav-upload-btn">
+    <a href="#subir" class="nav-upload-btn" id="navSubir">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/>
-        <line x1="12" y1="3" x2="12" y2="15"/>
+        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
       </svg>
-      Subir fotos
+      Subir
     </a>
   </nav>
 
-  <!-- PRE-BODA: visible solo antes del 12/09/2026 -->
-  <div id="preBoda" style="display:none">
+  <!-- PRE-BODA -->
+  <div id="preBoda" hidden>
     <div class="pre-wrap">
       <p class="pre-eyebrow">Galería</p>
       <h2 class="pre-title">Las fotos del día</h2>
       <div class="pre-deco"></div>
-      <p class="pre-text">La galería estará disponible a partir del día de la boda.<br/>Vuelve el 12 de septiembre.</p>
-      <div class="pre-countdown" id="preCountdown">
+      <p class="pre-text">La galería se abre el día de la boda.<br/>Vuelve el 12 de septiembre.</p>
+      <div class="pre-countdown">
         <div class="pre-cd-block"><span class="pre-cd-num" id="cdDias">—</span><span class="pre-cd-label">días</span></div>
         <div class="pre-cd-sep">·</div>
         <div class="pre-cd-block"><span class="pre-cd-num" id="cdHoras">—</span><span class="pre-cd-label">horas</span></div>
@@ -334,324 +284,422 @@ const preset    = import.meta.env.PUBLIC_CLOUDINARY_PRESET ?? '';
     </div>
   </div>
 
-  <!-- POST-BODA: visible desde el 12/09/2026 -->
-  <div id="postBoda" style="display:none">
+  <!-- POST-BODA -->
+  <div id="postBoda" hidden>
+    <div class="gl-header">
+      <p class="gl-eyebrow">12 · 09 · 2026</p>
+      <h1 class="gl-title">Fotos</h1>
+      <p class="gl-sub">Aimar & Deborah · Palacio de Murguia</p>
+    </div>
 
-  <!-- HEADER -->
-  <div class="gl-header">
-    <p class="gl-eyebrow">12 · 09 · 2026</p>
-    <h1 class="gl-title">Fotos</h1>
-    <p class="gl-sub">Aimar & Deborah · Palacio de Murguia</p>
-  </div>
+    <div class="gl-tabs" id="glTabs" role="tablist">
+      <button class="gl-tab active" data-cat="invitados" role="tab" aria-selected="true">Invitados</button>
+      <button class="gl-tab" data-cat="todas"      role="tab" aria-selected="false" hidden>Reportaje</button>
+      <button class="gl-tab" data-cat="ceremonia"  role="tab" aria-selected="false" hidden>Ceremonia</button>
+      <button class="gl-tab" data-cat="cocktail"   role="tab" aria-selected="false" hidden>Cocktail</button>
+      <button class="gl-tab" data-cat="comida"     role="tab" aria-selected="false" hidden>Comida</button>
+      <button class="gl-tab" data-cat="baile"      role="tab" aria-selected="false" hidden>Baile</button>
+      <button class="gl-tab" data-cat="momentos"   role="tab" aria-selected="false" hidden>Momentos</button>
+    </div>
 
-  <!-- TABS -->
-  <div class="gl-tabs" role="tablist">
-    <button class="gl-tab active" data-cat="todas">Todas</button>
-    <button class="gl-tab" data-cat="ceremonia">Ceremonia</button>
-    <button class="gl-tab" data-cat="cocktail">Cocktail</button>
-    <button class="gl-tab" data-cat="comida">Comida</button>
-    <button class="gl-tab" data-cat="baile">Baile</button>
-    <button class="gl-tab" data-cat="momentos">Momentos</button>
-    <button class="gl-tab" data-cat="invitados">Invitados</button>
-  </div>
-
-  <!-- GRID -->
-  <div class="gl-grid-wrap">
-    <div class="gl-grid" id="glGrid" data-layout="grid">
+    <div class="gl-grid-wrap">
+      <div class="gl-grid" id="glGrid"></div>
       <div class="gl-empty" id="glEmpty">
         <svg class="gl-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-          <rect x="3" y="3" width="18" height="18" rx="2"/>
-          <circle cx="8.5" cy="8.5" r="1.5"/>
-          <path d="M21 15l-5-5L5 21"/>
+          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
         </svg>
-        <p class="gl-empty-title" id="glEmptyTitle">Las fotos llegarán pronto</p>
-        <p class="gl-empty-sub" id="glEmptySub">Después de la boda colgaremos aquí todos los recuerdos del día. Vuelve a partir del 13 de septiembre.</p>
-        <span class="gl-date-badge" id="glEmptyBadge">12 · 09 · 2026</span>
+        <p class="gl-empty-title" id="glEmptyTitle">Aún no hay fotos</p>
+        <p class="gl-empty-sub" id="glEmptySub">¡Sé el primero! Usa el botón «Subir» de arriba.</p>
       </div>
+      <p class="gl-estado" id="glEstado"></p>
     </div>
-    <p class="inv-refresh" id="invRefresh">
-      Se actualiza cada 30 s · hace <span id="invTimer">0</span>s
-    </p>
-  </div>
 
-  <!-- LIGHTBOX -->
-  <div class="lightbox" id="lightbox">
-    <button class="lb-close" id="lbClose">✕</button>
-    <button class="lb-prev" id="lbPrev">‹</button>
-    <img id="lbImg" src="" alt="" />
-    <button class="lb-next" id="lbNext">›</button>
-  </div>
+    <section class="upload-section" id="subir">
+      <div class="upload-inner">
+        <div class="upload-header">
+          <p class="upload-eyebrow">Comparte lo que has visto</p>
+          <h2 class="upload-title">Sube tus fotos</h2>
+        </div>
 
-  <!-- ── SUBIR FOTOS ────────────────────────────────────────────── -->
-  <section class="upload-section" id="subir">
-    <div class="upload-inner">
-      <div class="upload-header">
-        <p class="upload-eyebrow">Comparte tus fotos</p>
-        <h2 class="upload-title">Sube las tuyas</h2>
-      </div>
+        <form id="uploadForm">
+          <label class="uf-label" for="ufNombre">Tu nombre</label>
+          <input class="uf-input" type="text" id="ufNombre" placeholder="Escribe tu nombre" autocomplete="name" required />
 
-      <form id="uploadForm">
-        <label class="uf-label" for="ufNombre">Tu nombre</label>
-        <input class="uf-input" type="text" id="ufNombre" placeholder="Aimar & Deborah" required />
-
-        <label class="uf-label">Fotos</label>
-        <div class="uf-dropzone" id="ufDropzone">
-          <input type="file" id="ufFileInput" accept="image/*" multiple />
-          <div class="uf-dz-icon">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="17 8 12 3 7 8"/>
-              <line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
+          <label class="uf-label">Fotos y vídeos</label>
+          <div class="uf-dropzone" id="ufDropzone">
+            <input type="file" id="ufFileInput" accept="image/*,video/*" multiple />
+            <div class="uf-dz-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+            </div>
+            <p class="uf-dz-text">Toca para elegir del carrete</p>
+            <p class="uf-dz-hint">Vídeos de hasta 15 segundos</p>
+            <p class="uf-dz-hint" id="ufFileCount"></p>
           </div>
-          <p class="uf-dz-text">Arrastra aquí o toca para seleccionar</p>
-          <p class="uf-dz-count" id="ufFileCount"></p>
+
+          <button type="submit" class="uf-submit" id="ufSubmitBtn">Subir</button>
+        </form>
+
+        <div class="uf-cola" id="ufCola" hidden>
+          <div class="uf-barra"><span id="ufBarra"></span></div>
+          <p id="ufColaTexto"></p>
+          <p class="uf-errores" id="ufErrores"></p>
+          <button class="uf-reintentar" id="ufReintentar" hidden>Reintentar lo que falló</button>
         </div>
-
-        <div class="uf-progress-wrap" id="ufProgressWrap">
-          <div class="uf-progress-bar" id="ufProgressBar"></div>
-        </div>
-
-        <button type="submit" class="uf-submit" id="ufSubmitBtn">Subir fotos</button>
-      </form>
-
-      <div class="upload-ok" id="uploadOk">
-        <p>¡Gracias por compartir!</p>
-        <p class="ok-sub">Tus fotos ya aparecen en la pestaña Invitados.</p>
-        <span class="upload-again" id="uploadAgain">Subir más fotos</span>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 
-  </div> <!-- /postBoda -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
+    <button class="lb-close" id="lbClose" aria-label="Cerrar">✕</button>
+    <button class="lb-prev" id="lbPrev" aria-label="Anterior">‹</button>
+    <div id="lbSlot"></div>
+    <button class="lb-next" id="lbNext" aria-label="Siguiente">›</button>
+    <p class="lb-caption" id="lbCaption"></p>
+  </div>
 
   <footer>
     <p>Aimar & Deborah · 12 · 09 · 2026</p>
     <p class="footer-sub">deborahyaimar.com</p>
   </footer>
 
-<script define:vars={{ cloudName, preset }} is:inline>
-  // ── FECHA DE BODA ─────────────────────────────────────────────
-  const BODA = new Date('2026-09-12T00:00:00');
-  const esHoy = new Date() >= BODA;
+<script>
+  import { procesar, ErrorMedio } from '../lib/media';
+  import { ColaSubida } from '../lib/uploadQueue';
 
-  document.getElementById('preBoda').style.display  = esHoy ? 'none' : 'block';
-  document.getElementById('postBoda').style.display = esHoy ? 'block' : 'none';
+  const API = import.meta.env.PUBLIC_API_BASE ?? '';
 
-  if (!esHoy) {
-    function actualizarCuentaAtras() {
-      const diff = BODA - new Date();
+  // Hora de Madrid explícita (+02:00 en septiembre): así la galería se abre a la
+  // vez para todos, sin depender de la zona horaria del móvil del invitado.
+  const BODA = new Date('2026-09-12T00:00:00+02:00');
+  const abierta = new Date() >= BODA;
+
+  const $ = (id: string) => document.getElementById(id)!;
+
+  $('preBoda').hidden = abierta;
+  $('postBoda').hidden = !abierta;
+  ($('navSubir') as HTMLElement).hidden = !abierta;
+
+  // ── CUENTA ATRÁS ────────────────────────────────────────────────────
+  if (!abierta) {
+    const tick = () => {
+      const diff = BODA.getTime() - Date.now();
       if (diff <= 0) { location.reload(); return; }
-      const dias  = Math.floor(diff / 86400000);
-      const horas = Math.floor((diff % 86400000) / 3600000);
-      const mins  = Math.floor((diff % 3600000) / 60000);
-      const segs  = Math.floor((diff % 60000) / 1000);
-      document.getElementById('cdDias').textContent  = String(dias);
-      document.getElementById('cdHoras').textContent = String(horas).padStart(2, '0');
-      document.getElementById('cdMins').textContent  = String(mins).padStart(2, '0');
-      document.getElementById('cdSegs').textContent  = String(segs).padStart(2, '0');
-    }
-    actualizarCuentaAtras();
-    setInterval(actualizarCuentaAtras, 1_000);
+      const p = (n: number) => String(n).padStart(2, '0');
+      $('cdDias').textContent  = String(Math.floor(diff / 86400000));
+      $('cdHoras').textContent = p(Math.floor((diff % 86400000) / 3600000));
+      $('cdMins').textContent  = p(Math.floor((diff % 3600000) / 60000));
+      $('cdSegs').textContent  = p(Math.floor((diff % 60000) / 1000));
+    };
+    tick();
+    setInterval(tick, 1000);
+  } else {
+    arrancarGaleria();
   }
 
-  if (!esHoy) { /* no inicializar galería */ } else {
-
-  // ── DATOS GALERÍA OFICIAL ──────────────────────────────────────
-  // Rellenar después de la boda:
-  // { src: '/fotos/foto.jpg', full: '/fotos/foto.jpg', cat: 'ceremonia', alt: '' }
-  const FOTOS = [];
-
-  // ── ESTADO ────────────────────────────────────────────────────
-  let glCat    = 'todas';
-  let invFotos = [];
-  let secondsSince = 0;
-
-  const glGrid      = document.getElementById('glGrid');
-  const glEmpty     = document.getElementById('glEmpty');
-  const glEmptyTitle = document.getElementById('glEmptyTitle');
-  const glEmptySub  = document.getElementById('glEmptySub');
-  const glEmptyBadge = document.getElementById('glEmptyBadge');
-  const invRefresh  = document.getElementById('invRefresh');
-  const invTimer    = document.getElementById('invTimer');
-  const lightbox    = document.getElementById('lightbox');
-  const lbImg       = document.getElementById('lbImg');
-
-  // ── LIGHTBOX ──────────────────────────────────────────────────
-  function openLb(idx, getItems) {
-    lightbox._idx = idx; lightbox._getItems = getItems;
-    lbImg.src = (getItems()[idx].full ?? getItems()[idx].src ?? getItems()[idx].thumb);
-    lightbox.classList.add('open');
-    document.body.style.overflow = 'hidden';
+  // ── GALERÍA ─────────────────────────────────────────────────────────
+  interface Item {
+    id: string; tipo: 'foto' | 'video'; categoria: string | null;
+    nombre: string; deviceId: string;
+    thumb: string; web: string; poster: string | null;
+    duracion: number | null; ancho: number; alto: number; ts: number;
   }
-  function closeLb() { lightbox.classList.remove('open'); document.body.style.overflow = ''; }
-  function stepLb(dir) {
-    const items = lightbox._getItems();
-    lightbox._idx = (lightbox._idx + dir + items.length) % items.length;
-    lbImg.src = (items[lightbox._idx].full ?? items[lightbox._idx].src ?? items[lightbox._idx].thumb);
-  }
-  document.getElementById('lbClose').addEventListener('click', closeLb);
-  lightbox.addEventListener('click', e => { if (e.target === lightbox) closeLb(); });
-  document.getElementById('lbPrev').addEventListener('click', () => stepLb(-1));
-  document.getElementById('lbNext').addEventListener('click', () => stepLb(1));
-  document.addEventListener('keydown', e => {
-    if (!lightbox.classList.contains('open')) return;
-    if (e.key === 'ArrowLeft')  stepLb(-1);
-    if (e.key === 'ArrowRight') stepLb(1);
-    if (e.key === 'Escape')     closeLb();
-  });
 
-  // ── RENDER ────────────────────────────────────────────────────
-  function renderGallery() {
-    glGrid.querySelectorAll('.gl-item, .inv-item').forEach(el => el.remove());
-    invRefresh.style.display = 'none';
+  function arrancarGaleria() {
+    const grid    = $('glGrid');
+    const vacio   = $('glEmpty');
+    const estado  = $('glEstado');
+    const tabs    = Array.from(document.querySelectorAll<HTMLButtonElement>('.gl-tab'));
 
-    if (glCat === 'invitados') {
-      glGrid.dataset.layout = 'masonry';
-      invRefresh.style.display = invFotos.length > 0 ? 'block' : 'none';
+    let cat: string = 'invitados';
+    let invitados: Item[] = [];
+    let oficiales: Item[] = [];
+    const pintados = new Set<string>();
 
-      if (invFotos.length === 0) {
-        glEmpty.style.display = 'flex';
-        glEmptyTitle.textContent = 'Aún no hay fotos';
-        glEmptySub.textContent = '¡Sé el primero en subir la tuya! Usa el botón "Subir fotos" de arriba.';
-        glEmptyBadge.style.display = 'none';
-        return;
+    const visibles = (): Item[] => {
+      if (cat === 'invitados') return invitados;
+      if (cat === 'todas') return oficiales;
+      return oficiales.filter((i) => i.categoria === cat);
+    };
+
+    function tarjeta(item: Item, indice: number): HTMLElement {
+      const div = document.createElement('div');
+      div.className = 'gl-item';
+      div.dataset.id = item.id;
+      div.style.animationDelay = `${Math.min(indice, 8) * 35}ms`;
+      // Reserva el hueco antes de que cargue la imagen: sin esto el masonry
+      // baila mientras entran fotos nuevas.
+      if (item.ancho && item.alto) div.style.aspectRatio = `${item.ancho} / ${item.alto}`;
+
+      const img = document.createElement('img');
+      img.src = item.tipo === 'video' ? (item.poster ?? item.thumb) : item.thumb;
+      img.loading = 'lazy';
+      img.decoding = 'async';
+      img.alt = item.nombre ? `Foto de ${item.nombre}` : 'Foto de la boda';
+      div.appendChild(img);
+
+      if (item.tipo === 'video') {
+        const play = document.createElement('div');
+        play.className = 'gl-play';
+        play.innerHTML = '<span>▶</span>';
+        div.appendChild(play);
+        if (item.duracion) {
+          const dur = document.createElement('span');
+          dur.className = 'gl-dur';
+          dur.textContent = `${Math.round(item.duracion)}s`;
+          div.appendChild(dur);
+        }
       }
-      glEmpty.style.display = 'none';
-      invFotos.forEach((foto, idx) => {
-        const div = document.createElement('div');
-        div.className = 'inv-item';
-        div.style.animationDelay = `${Math.min(idx, 10) * 35}ms`;
-        div.innerHTML = `
-          <img src="${foto.thumb}" alt="Foto de ${foto.nombre}" loading="lazy" />
-          ${foto.nombre ? `<span class="inv-item-name">${foto.nombre}</span>` : ''}`;
-        div.addEventListener('click', () => openLb(idx, () => invFotos));
-        glGrid.appendChild(div);
+
+      if (item.nombre) {
+        const etiqueta = document.createElement('span');
+        etiqueta.className = 'gl-item-name';
+        // textContent, nunca innerHTML: el nombre lo escribe un invitado.
+        etiqueta.textContent = item.nombre;
+        div.appendChild(etiqueta);
+      }
+
+      div.addEventListener('click', () => abrirLightbox(item.id));
+      return div;
+    }
+
+    /** Render incremental: solo añade lo nuevo, nunca repinta la rejilla entera. */
+    function render(reinicia = false) {
+      if (reinicia) { grid.replaceChildren(); pintados.clear(); }
+      const items = visibles();
+
+      items.forEach((item, i) => {
+        if (pintados.has(item.id)) return;
+        pintados.add(item.id);
+        const nodo = tarjeta(item, i);
+        // Los más nuevos van arriba.
+        const primero = grid.firstElementChild;
+        if (primero && Number(primero.getAttribute('data-ts') ?? 0) < item.ts) {
+          grid.insertBefore(nodo, primero);
+        } else {
+          grid.appendChild(nodo);
+        }
+        nodo.setAttribute('data-ts', String(item.ts));
       });
 
-    } else {
-      glGrid.dataset.layout = 'grid';
-      const items = glCat === 'todas' ? FOTOS : FOTOS.filter(f => f.cat === glCat);
-
-      if (items.length === 0) {
-        glEmpty.style.display = 'flex';
-        glEmptyTitle.textContent = 'Las fotos llegarán pronto';
-        glEmptySub.textContent = 'Después de la boda colgaremos aquí todos los recuerdos del día. Vuelve a partir del 13 de septiembre.';
-        glEmptyBadge.style.display = '';
-        return;
+      vacio.classList.toggle('visible', items.length === 0);
+      if (cat === 'invitados') {
+        $('glEmptyTitle').textContent = 'Aún no hay fotos';
+        $('glEmptySub').textContent = '¡Sé el primero! Usa el botón «Subir» de arriba.';
+        estado.textContent = items.length ? `${items.length} fotos · se actualiza sola` : '';
+      } else {
+        $('glEmptyTitle').textContent = 'El reportaje llegará pronto';
+        $('glEmptySub').textContent = 'Cuando el fotógrafo nos entregue las fotos, aparecerán aquí.';
+        estado.textContent = items.length ? `${items.length} fotos` : '';
       }
-      glEmpty.style.display = 'none';
-      items.forEach((foto, idx) => {
-        const div = document.createElement('div');
-        div.className = 'gl-item';
-        div.innerHTML = `<img src="${foto.src}" alt="${foto.alt ?? ''}" loading="lazy" />`;
-        div.addEventListener('click', () => openLb(idx, () => items));
-        glGrid.appendChild(div);
-      });
     }
-  }
 
-  // Tabs
-  document.querySelectorAll('.gl-tab').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.gl-tab').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      glCat = btn.dataset.cat;
-      renderGallery();
+    // ── LIGHTBOX ──────────────────────────────────────────────────────
+    const lb = $('lightbox');
+    const slot = $('lbSlot');
+    let lbId: string | null = null;
+
+    function abrirLightbox(id: string) {
+      lbId = id;
+      pintarLightbox();
+      lb.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function cerrarLightbox() {
+      lb.classList.remove('open');
+      slot.replaceChildren();
+      document.body.style.overflow = '';
+      lbId = null;
+    }
+    function pintarLightbox() {
+      const items = visibles();
+      const item = items.find((i) => i.id === lbId);
+      if (!item) { cerrarLightbox(); return; }
+
+      slot.replaceChildren();
+      if (item.tipo === 'video') {
+        const v = document.createElement('video');
+        v.src = item.web; v.controls = true; v.autoplay = true;
+        v.playsInline = true; v.poster = item.poster ?? '';
+        slot.appendChild(v);
+      } else {
+        const img = document.createElement('img');
+        img.src = item.web;
+        img.alt = item.nombre ? `Foto de ${item.nombre}` : 'Foto de la boda';
+        slot.appendChild(img);
+      }
+      $('lbCaption').textContent = item.nombre ?? '';
+    }
+    /** Avanza por id, no por índice: las fotos que entran en vivo no te mueven. */
+    function paso(dir: number) {
+      const items = visibles();
+      const i = items.findIndex((x) => x.id === lbId);
+      if (i < 0) return;
+      lbId = items[(i + dir + items.length) % items.length]!.id;
+      pintarLightbox();
+    }
+
+    $('lbClose').addEventListener('click', cerrarLightbox);
+    $('lbPrev').addEventListener('click', () => paso(-1));
+    $('lbNext').addEventListener('click', () => paso(1));
+    lb.addEventListener('click', (e) => { if (e.target === lb) cerrarLightbox(); });
+    document.addEventListener('keydown', (e) => {
+      if (!lb.classList.contains('open')) return;
+      if (e.key === 'Escape') cerrarLightbox();
+      if (e.key === 'ArrowLeft') paso(-1);
+      if (e.key === 'ArrowRight') paso(1);
     });
-  });
 
-  renderGallery();
+    // Swipe: en el móvil nadie acierta a las flechitas.
+    let x0 = 0, y0 = 0;
+    lb.addEventListener('touchstart', (e) => {
+      x0 = e.touches[0]!.clientX; y0 = e.touches[0]!.clientY;
+    }, { passive: true });
+    lb.addEventListener('touchend', (e) => {
+      const dx = e.changedTouches[0]!.clientX - x0;
+      const dy = e.changedTouches[0]!.clientY - y0;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) paso(dx < 0 ? 1 : -1);
+    }, { passive: true });
 
-  // ── FOTOS INVITADOS: FETCH ─────────────────────────────────────
-  async function fetchInvFotos() {
-    try {
-      const res  = await fetch('/.netlify/functions/fotos-invitados');
-      const data = await res.json();
-      if (Array.isArray(data)) {
-        invFotos = data;
-        secondsSince = 0;
-        if (glCat === 'invitados') renderGallery();
-        // Actualizar badge en la pestaña
-        const tab = document.querySelector('.gl-tab[data-cat="invitados"]');
-        if (tab && data.length > 0) tab.textContent = `Invitados (${data.length})`;
+    // ── TABS ──────────────────────────────────────────────────────────
+    tabs.forEach((btn) => {
+      btn.addEventListener('click', () => {
+        tabs.forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
+        btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
+        cat = btn.dataset.cat!;
+        render(true);
+      });
+    });
+
+    // ── SONDEO ────────────────────────────────────────────────────────
+    // OJO: siempre la MISMA URL, sin cache-buster. La respuesta está cacheada
+    // en el borde 15 s; añadir ?t=Date.now() saltaría la caché y recrearía
+    // exactamente el fallo que tumbaba la galería con 150 invitados.
+    async function traer(origen: 'invitado' | 'oficial'): Promise<Item[] | null> {
+      try {
+        const url = origen === 'oficial' ? `${API}/indice.json?origen=oficial` : `${API}/indice.json`;
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const datos = await res.json();
+        return Array.isArray(datos.items) ? datos.items : null;
+      } catch { return null; }
+    }
+
+    async function refrescar() {
+      const [inv, ofi] = await Promise.all([traer('invitado'), traer('oficial')]);
+      // Si falla la red, conserva lo que ya había: nunca vaciar la galería
+      // por un error puntual (el bug original hacía justo eso).
+      if (inv) invitados = inv;
+      if (ofi) oficiales = ofi;
+
+      const hayOficiales = oficiales.length > 0;
+      tabs.forEach((b) => {
+        if (b.dataset.cat !== 'invitados') b.hidden = !hayOficiales;
+      });
+      render();
+    }
+
+    refrescar();
+    setInterval(refrescar, 15_000);
+
+    // ── SUBIDA ────────────────────────────────────────────────────────
+    const cola = new ColaSubida(API);
+    const form = $('uploadForm') as HTMLFormElement;
+    const input = $('ufFileInput') as HTMLInputElement;
+    const nombreInput = $('ufNombre') as HTMLInputElement;
+    const boton = $('ufSubmitBtn') as HTMLButtonElement;
+    const cuenta = $('ufFileCount');
+    const panel = $('ufCola');
+    const barra = $('ufBarra');
+    const texto = $('ufColaTexto');
+    const errores = $('ufErrores');
+    const reintentar = $('ufReintentar') as HTMLButtonElement;
+
+    // El nombre se pide una vez y se recuerda.
+    const deviceId = localStorage.getItem('ad-device') ?? crypto.randomUUID();
+    localStorage.setItem('ad-device', deviceId);
+    nombreInput.value = localStorage.getItem('ad-nombre') ?? '';
+
+    input.addEventListener('change', () => {
+      const n = input.files?.length ?? 0;
+      cuenta.textContent = n ? `${n} archivo${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''}` : '';
+    });
+
+    const dz = $('ufDropzone');
+    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault(); dz.classList.remove('drag-over');
+      const dt = (e as DragEvent).dataTransfer;
+      if (dt?.files?.length) { input.files = dt.files; input.dispatchEvent(new Event('change')); }
+    });
+
+    cola.alCambiar((r) => {
+      if (!r.total) { panel.hidden = true; return; }
+      panel.hidden = false;
+      const pct = r.total ? Math.round((r.hechos / r.total) * 100) : 0;
+      barra.style.width = `${pct}%`;
+
+      const enCola = r.pendientes - r.reintentando;
+      const partes: string[] = [];
+      if (r.hechos)       partes.push(`${r.hechos} de ${r.total} subidas`);
+      if (r.subiendo)     partes.push(`${r.subiendo} en curso`);
+      if (r.reintentando) partes.push(`${r.reintentando} reintentando`);
+      if (enCola > 0)     partes.push(`${enCola} en cola`);
+      if (r.fallidos)     partes.push(`${r.fallidos} fallidas`);
+      texto.textContent = partes.join(' · ');
+
+      panel.classList.toggle('tiene-fallos', r.fallidos > 0);
+      reintentar.hidden = r.fallidos === 0;
+      errores.textContent = r.items
+        .filter((i) => i.estado === 'fallido' && i.error)
+        .map((i) => i.error)
+        .slice(0, 3)
+        .join(' · ');
+
+      // Solo se da por bueno cuando el servidor lo confirmó todo.
+      if (r.hechos === r.total && !r.fallidos) {
+        texto.textContent = `¡Gracias! ${r.hechos} archivo${r.hechos > 1 ? 's' : ''} en la galería.`;
+        refrescar();
       }
-    } catch { /* silencioso */ }
+    });
+
+    reintentar.addEventListener('click', () => cola.reintentarFallidos());
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const archivos = Array.from(input.files ?? []);
+      if (!archivos.length) return;
+      if (!API) { errores.textContent = 'La subida aún no está configurada.'; panel.hidden = false; return; }
+
+      const nombre = nombreInput.value.trim();
+      localStorage.setItem('ad-nombre', nombre);
+
+      boton.disabled = true;
+      boton.textContent = 'Preparando…';
+      panel.hidden = false;
+
+      const fallos: string[] = [];
+      for (const archivo of archivos) {
+        try {
+          const medio = await procesar(archivo);
+          await cola.encolar(medio, nombre, deviceId);
+        } catch (err) {
+          fallos.push(err instanceof ErrorMedio ? err.message : `No se pudo procesar «${archivo.name}».`);
+        }
+      }
+
+      if (fallos.length) errores.textContent = fallos.join(' ');
+      form.reset();
+      nombreInput.value = nombre;
+      cuenta.textContent = '';
+      boton.disabled = false;
+      boton.textContent = 'Subir';
+    });
   }
-
-  fetchInvFotos();
-  setInterval(() => fetchInvFotos(), 30_000);
-  setInterval(() => { secondsSince++; if (invTimer) invTimer.textContent = String(secondsSince); }, 1_000);
-
-  // ── UPLOAD ────────────────────────────────────────────────────
-  const uploadForm   = document.getElementById('uploadForm');
-  const fileInput    = document.getElementById('ufFileInput');
-  const dropzone     = document.getElementById('ufDropzone');
-  const fileCount    = document.getElementById('ufFileCount');
-  const progressWrap = document.getElementById('ufProgressWrap');
-  const progressBar  = document.getElementById('ufProgressBar');
-  const submitBtn    = document.getElementById('ufSubmitBtn');
-  const uploadOk     = document.getElementById('uploadOk');
-  const uploadAgain  = document.getElementById('uploadAgain');
-  const nombreInput  = document.getElementById('ufNombre');
-
-  function updateCount() {
-    const n = fileInput.files?.length ?? 0;
-    fileCount.textContent = n > 0 ? `${n} foto${n > 1 ? 's' : ''} seleccionada${n > 1 ? 's' : ''}` : '';
-  }
-  fileInput.addEventListener('change', updateCount);
-  dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag-over'); });
-  dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag-over'));
-  dropzone.addEventListener('drop', e => {
-    e.preventDefault(); dropzone.classList.remove('drag-over');
-    if (e.dataTransfer?.files) { fileInput.files = e.dataTransfer.files; updateCount(); }
-  });
-
-  uploadAgain.addEventListener('click', () => {
-    uploadOk.style.display = 'none';
-    uploadForm.style.display = '';
-    uploadForm.reset();
-    fileCount.textContent = '';
-  });
-
-  uploadForm.addEventListener('submit', async e => {
-    e.preventDefault();
-    const nombre = nombreInput.value.trim();
-    const files  = Array.from(fileInput.files ?? []);
-    if (!files.length) { alert('Selecciona al menos una foto.'); return; }
-    if (!cloudName || !preset) {
-      alert('La subida aún no está configurada.');
-      return;
-    }
-
-    submitBtn.disabled = true;
-    progressWrap.style.display = 'block';
-    progressBar.style.width = '0%';
-
-    let uploaded = 0;
-    for (const file of files) {
-      const fd = new FormData();
-      fd.append('file', file);
-      fd.append('upload_preset', preset);
-      fd.append('folder', 'wedding/invitados');
-      if (nombre) fd.append('context', `nombre=${nombre}`);
-      await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, { method: 'POST', body: fd });
-      uploaded++;
-      progressBar.style.width = `${(uploaded / files.length) * 100}%`;
-    }
-
-    submitBtn.disabled = false;
-    progressWrap.style.display = 'none';
-    uploadForm.style.display = 'none';
-    uploadOk.style.display = 'block';
-
-    // Refrescar y saltar a la pestaña invitados
-    await fetchInvFotos();
-    document.querySelector('.gl-tab[data-cat="invitados"]').click();
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-
-  } // fin bloque esHoy
 </script>
 
 </body>

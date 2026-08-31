@@ -1,0 +1,37 @@
+name = "ad-galeria-api"
+main = "src/index.ts"
+compatibility_date = "2026-08-01"
+
+# Dominio propio: obligatorio, no workers.dev. La Cache API (de la que depende
+# todo el diseño) NO funciona en workers.dev.
+# El dominio api.deborahyaimar.org está conectado desde el panel de Workers
+# (Settings -> Domains & Routes). No se declara aquí porque gestionarlo desde
+# wrangler exige el permiso Zone->Workers Routes en el token.
+workers_dev = false
+
+# Bucket público servido por fotos.deborahyaimar.org.
+# El Worker NO sirve los medios: solo firma las subidas y mantiene el índice.
+# Los bytes van del navegador a R2 y de R2 al navegador, sin pasar por aquí.
+[[r2_buckets]]
+binding = "MEDIA"
+bucket_name = "ad-media"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ad-galeria"
+database_id = "37f8a0e9-819a-4239-862f-628b61b9fc0c"
+
+[vars]
+# Origen permitido para CORS. El sitio sigue alojado en Netlify.
+SITIO = "https://deborahyaimar.com"
+# Base pública de los medios (dominio personalizado de R2).
+# Ojo: .net, no .com. El .com se queda intacto en Netlify.
+MEDIA_BASE = "https://fotos.deborahyaimar.org"
+# Cuenta de Cloudflare, para construir el endpoint S3 de R2.
+R2_ACCOUNT_ID = "a4c656f422cf48ffa8f3a734bf518b38"
+R2_BUCKET = "ad-media"
+
+# Secretos (se ponen con `wrangler secret put`, nunca en este fichero):
+#   R2_ACCESS_KEY_ID      → token de API de R2 con permiso de escritura
+#   R2_SECRET_ACCESS_KEY
+#   ADMIN_PASSWORD        → para el panel de moderación
