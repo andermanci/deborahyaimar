@@ -60,6 +60,17 @@ export interface ItemCola {
   creado: number;
   marcadoEn?: number;    // cuándo pasó a «subiendo», para detectar huérfanos
   reintentarEn?: number; // no volver a intentarlo antes de este instante
+  opciones?: OpcionesSubida;
+}
+
+/**
+ * Solo lo usa el panel de los novios, para el reportaje oficial. Sin esto, la
+ * cola se comporta exactamente igual que para un invitado.
+ */
+export interface OpcionesSubida {
+  origen?: 'invitado' | 'oficial';
+  categoria?: string | null;
+  password?: string;   // el servidor exige contraseña si origen es 'oficial'
 }
 
 export interface ResumenCola {
@@ -196,7 +207,12 @@ export class ColaSubida {
   }
 
   /** Encola un medio ya procesado. Devuelve al llamante de inmediato. */
-  async encolar(medio: MedioProcesado, nombre: string, deviceId: string): Promise<void> {
+  async encolar(
+    medio: MedioProcesado,
+    nombre: string,
+    deviceId: string,
+    opciones?: OpcionesSubida,
+  ): Promise<void> {
     const blobs: Record<string, Blob> = { thumb: medio.thumb };
     if (medio.tipo === 'foto') {
       blobs.web = medio.web;
@@ -219,6 +235,7 @@ export class ColaSubida {
       },
       intentos: 0,
       creado: Date.now(),
+      opciones,
     });
     await this.avisar();
     void this.procesar();
@@ -306,6 +323,12 @@ export class ColaSubida {
     }
   }
 
+  private cabeceras(item: ItemCola): Record<string, string> {
+    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (item.opciones?.password) h['X-Admin-Password'] = item.opciones.password;
+    return h;
+  }
+
   /** Pide al Worker las URLs prefirmadas. Las claves las decide el servidor. */
   private async firmar(item: ItemCola): Promise<void> {
     const archivos = Object.entries(item.blobs).map(([rol, blob]) => ({
@@ -316,8 +339,8 @@ export class ColaSubida {
 
     const res = await fetchConPlazo(`${this.api}/firmar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tipo: item.tipo, archivos }),
+      headers: this.cabeceras(item),
+      body: JSON.stringify({ tipo: item.tipo, archivos, origen: item.opciones?.origen }),
     }, PLAZO_API);
     if (!res.ok) throw new Error(`No se pudo preparar la subida (${res.status})`);
 
@@ -394,6 +417,10 @@ export class ColaSubida {
       ancho: item.meta.ancho,
       alto: item.meta.alto,
     };
+    if (item.opciones?.origen === 'oficial') {
+      cuerpo.origen = 'oficial';
+      cuerpo.categoria = item.opciones.categoria ?? null;
+    }
     if (item.tipo === 'video') {
       cuerpo.key_poster = item.claves!.poster;
       cuerpo.duracion_s = item.meta.duracion;
@@ -402,7 +429,7 @@ export class ColaSubida {
 
     const res = await fetchConPlazo(`${this.api}/completar`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: this.cabeceras(item),
       body: JSON.stringify(cuerpo),
     }, PLAZO_API);
     if (!res.ok) throw new Error(`El servidor rechazó la subida (${res.status})`);

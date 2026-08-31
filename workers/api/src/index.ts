@@ -37,6 +37,8 @@ const MAX_PARTES = 20;               // → 100 MB de vídeo como techo
 const TTL_INDICE = 15;               // segundos de frescura del índice
 const FIRMA_TTL = 6 * 3600;          // 6 h: una subida lenta jamás caduca a medias
 
+const CATEGORIAS = ['ceremonia', 'cocktail', 'comida', 'baile', 'momentos'];
+
 const ROLES = ['thumb', 'web', 'poster', 'video'] as const;
 type Rol = (typeof ROLES)[number];
 
@@ -46,7 +48,7 @@ function cors(env: Env, extra: HeadersInit = {}): HeadersInit {
   return {
     'Access-Control-Allow-Origin': env.SITIO,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Admin-Password',
     'Access-Control-Max-Age': '86400',
     ...extra,
   };
@@ -104,6 +106,27 @@ async function huella(deviceId: string): Promise<string> {
     .map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Autenticación del panel. Falla cerrado: si el secreto no está configurado,
+ * se rechaza todo en vez de dejar pasar `undefined === undefined`.
+ *
+ * El retardo en los fallos es freno a la fuerza bruta; la barrera real son los
+ * ~72 bits de la contraseña.
+ */
+async function esAdmin(req: Request, env: Env): Promise<boolean> {
+  const esperada = env.ADMIN_PASSWORD;
+  if (typeof esperada !== 'string' || esperada.length === 0) return false;
+  const dada = req.headers.get('X-Admin-Password') ?? '';
+  if (dada === esperada) return true;
+  await new Promise((r) => setTimeout(r, 500));
+  return false;
+}
+
+/** Respuesta del panel: nunca cacheada, ni por el navegador ni por el borde. */
+function jsonAdmin(data: unknown, env: Env, status = 200): Response {
+  return json(data, env, status, { 'Cache-Control': 'no-store' });
+}
+
 function extension(contentType: string): string {
   if (contentType === 'video/mp4') return 'mp4';
   if (contentType === 'video/quicktime') return 'mov';
@@ -122,11 +145,18 @@ async function firmar(req: Request, env: Env): Promise<Response> {
   const tipo = body?.tipo;
   if (tipo !== 'foto' && tipo !== 'video') return error('tipo debe ser foto o video', env);
 
+  // El reportaje oficial solo lo suben los novios. Sin esta comprobación
+  // cualquiera podría colar fotos entre las del fotógrafo.
+  const origen = body?.origen === 'oficial' ? 'oficial' : 'invitado';
+  if (origen === 'oficial' && !(await esAdmin(req, env))) {
+    return error('no autorizado para subir al reportaje', env, 403);
+  }
+
   const archivos = Array.isArray(body?.archivos) ? body.archivos : null;
   if (!archivos?.length) return error('faltan archivos', env);
 
   const id = crypto.randomUUID();
-  const prefijo = `invitados/${id}`;
+  const prefijo = `${origen === 'oficial' ? 'oficial' : 'invitados'}/${id}`;
   const subidas: any[] = [];
 
   for (const a of archivos) {
@@ -174,7 +204,7 @@ async function firmar(req: Request, env: Env): Promise<Response> {
     }
   }
 
-  return json({ id, subidas }, env);
+  return json({ id, subidas, origen }, env);
 }
 
 // ── POST /completar ───────────────────────────────────────────────────
@@ -189,10 +219,19 @@ async function completar(req: Request, env: Env): Promise<Response> {
   if (typeof key_thumb !== 'string' || typeof key_web !== 'string') {
     return error('faltan claves de archivo', env);
   }
-  // Las claves las generó el servidor bajo invitados/<id>/: verifica que
+
+  const origen = body?.origen === 'oficial' ? 'oficial' : 'invitado';
+  if (origen === 'oficial' && !(await esAdmin(req, env))) {
+    return error('no autorizado para subir al reportaje', env, 403);
+  }
+  const categoria = origen === 'oficial' && CATEGORIAS.includes(body?.categoria)
+    ? body.categoria : null;
+
+  // Las claves las generó el servidor bajo <origen>/<id>/: verifica que
   // el cliente no las haya cambiado por otras.
+  const prefijoOk = `${origen === 'oficial' ? 'oficial' : 'invitados'}/${id}/`;
   for (const k of [key_thumb, key_web, key_poster].filter(Boolean)) {
-    if (!String(k).startsWith(`invitados/${id}/`)) return error('clave no autorizada', env, 403);
+    if (!String(k).startsWith(prefijoOk)) return error('clave no autorizada', env, 403);
   }
 
   // Cerrar el multipart del vídeo, si aplica.
@@ -223,9 +262,9 @@ async function completar(req: Request, env: Env): Promise<Response> {
        (id, tipo, origen, categoria, nombre, device_id,
         key_thumb, key_web, key_original, key_poster,
         duracion_s, ancho, alto, oculta, created_at)
-     values (?, ?, 'invitado', null, ?, ?, ?, ?, null, ?, ?, ?, ?, 0, ?)`
+     values (?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, 0, ?)`
   ).bind(
-    id, tipo,
+    id, tipo, origen, categoria,
     (nombre ?? '').toString().slice(0, 60) || null,
     (device_id ?? '').toString().slice(0, 40) || null,
     key_thumb, key_web, key_poster ?? null,
@@ -320,25 +359,179 @@ async function borrar(req: Request, env: Env): Promise<Response> {
   return json({ ok: true }, env);
 }
 
-// ── POST /moderar ─────────────────────────────────────────────────────
-async function moderar(req: Request, env: Env): Promise<Response> {
+// ══ PANEL DE LOS NOVIOS ═══════════════════════════════════════════════
+// Todo bajo /admin/* exige la cabecera X-Admin-Password y responde sin caché:
+// el panel jamás debe ver datos viejos.
+
+/** Lee y valida una lista de ids del cuerpo. */
+function leerIds(body: any): string[] | null {
+  const ids = Array.isArray(body?.ids) ? body.ids : null;
+  if (!ids?.length || ids.length > 500) return null;
+  return ids.every((x: unknown) => typeof x === 'string' && x.length > 0) ? ids : null;
+}
+
+// ── GET /admin/media ──────────────────────────────────────────────────
+// A diferencia del índice público, este SÍ devuelve las ocultas. Ese era el
+// agujero del panel viejo: al ocultar algo desaparecía también para los novios
+// y no había forma de recuperarlo.
+async function adminMedia(req: Request, env: Env): Promise<Response> {
+  const url = new URL(req.url);
+  const origen = url.searchParams.get('origen');
+  const estado = url.searchParams.get('estado');   // visibles | ocultas | todas
+
+  const donde: string[] = [];
+  const args: unknown[] = [];
+  if (origen === 'invitado' || origen === 'oficial') { donde.push('origen = ?'); args.push(origen); }
+  if (estado === 'ocultas') donde.push('oculta = 1');
+  else if (estado === 'visibles') donde.push('oculta = 0');
+
+  const { results } = await env.DB.prepare(
+    `select id, tipo, origen, categoria, nombre, device_id, oculta,
+            key_thumb, key_web, key_poster, duracion_s, ancho, alto, created_at
+       from media
+      ${donde.length ? 'where ' + donde.join(' and ') : ''}
+      order by created_at desc
+      limit 3000`
+  ).bind(...args).all();
+
+  const base = env.MEDIA_BASE;
+  const items = (results ?? []).map((r: any) => ({
+    id: r.id,
+    tipo: r.tipo,
+    origen: r.origen,
+    categoria: r.categoria,
+    nombre: r.nombre ?? '',
+    oculta: r.oculta === 1,
+    thumb: `${base}/${r.key_thumb}`,
+    web: `${base}/${r.key_web}`,
+    poster: r.key_poster ? `${base}/${r.key_poster}` : null,
+    duracion: r.duracion_s,
+    ancho: r.ancho,
+    alto: r.alto,
+    ts: r.created_at,
+  }));
+
+  return jsonAdmin({ items, total: items.length }, env);
+}
+
+// ── POST /admin/ocultar ───────────────────────────────────────────────
+async function adminOcultar(req: Request, env: Env): Promise<Response> {
   let body: any;
   try { body = await req.json(); } catch { return error('JSON inválido', env); }
 
-  // Falla cerrado: si el secreto no está configurado, se rechaza todo.
-  // Comparar sin esta guarda dejaba pasar `undefined === undefined`.
-  const esperada = env.ADMIN_PASSWORD;
-  if (typeof esperada !== 'string' || esperada.length === 0) {
-    return error('moderación no configurada en el servidor', env, 503);
-  }
-  if (typeof body?.password !== 'string' || body.password !== esperada) {
-    return error('no autorizado', env, 401);
-  }
-  if (typeof body?.id !== 'string' || !body.id) return error('falta id', env);
+  const ids = leerIds(body);
+  if (!ids) return error('lista de ids inválida', env);
+  const oculta = body?.oculta === false ? 0 : 1;
 
-  const ocultar = body.ocultar === false ? 0 : 1;
-  await env.DB.prepare('update media set oculta = ? where id = ?').bind(ocultar, body.id).run();
-  return json({ ok: true }, env);
+  await env.DB.batch(
+    ids.map((id) => env.DB.prepare('update media set oculta = ? where id = ?').bind(oculta, id))
+  );
+  return jsonAdmin({ ok: true, afectados: ids.length }, env);
+}
+
+// ── POST /admin/eliminar ──────────────────────────────────────────────
+// DEFINITIVO: se lleva los objetos de R2 y las filas de D1. En el panel solo
+// se llega aquí desde la papelera y tras confirmar.
+async function adminEliminar(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const ids = leerIds(body);
+  if (!ids) return error('lista de ids inválida', env);
+
+  const marcadores = ids.map(() => '?').join(',');
+  const { results } = await env.DB.prepare(
+    `select key_thumb, key_web, key_poster from media where id in (${marcadores})`
+  ).bind(...ids).all();
+
+  // Primero los bytes: si falla D1 después, quedan filas huérfanas (visibles y
+  // borrables). Al revés quedarían objetos invisibles ocupando espacio para
+  // siempre.
+  const claves = (results ?? []).flatMap((r: any) =>
+    [r.key_thumb, r.key_web, r.key_poster].filter(Boolean) as string[]);
+  await Promise.all(claves.map((k) => env.MEDIA.delete(k).catch(() => {})));
+
+  await env.DB.batch(
+    ids.map((id) => env.DB.prepare('delete from media where id = ?').bind(id))
+  );
+  return jsonAdmin({ ok: true, borrados: ids.length, objetos: claves.length }, env);
+}
+
+// ── POST /admin/categoria ─────────────────────────────────────────────
+async function adminCategoria(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const ids = leerIds(body);
+  if (!ids) return error('lista de ids inválida', env);
+  const cat = body?.categoria;
+  if (cat !== null && !CATEGORIAS.includes(cat)) return error('categoría desconocida', env);
+
+  await env.DB.batch(
+    ids.map((id) => env.DB.prepare('update media set categoria = ? where id = ?').bind(cat, id))
+  );
+  return jsonAdmin({ ok: true, afectados: ids.length }, env);
+}
+
+// ── GET /admin/stats ──────────────────────────────────────────────────
+async function adminStats(req: Request, env: Env): Promise<Response> {
+  const { results } = await env.DB.prepare(
+    `select tipo, origen, oculta, nombre, created_at from media`
+  ).all();
+  const filas = (results ?? []) as any[];
+
+  const porNombre = new Map<string, number>();
+  const porHora = new Map<string, number>();
+  for (const r of filas) {
+    if (r.oculta === 1) continue;
+    const n = (r.nombre ?? '').trim() || 'Sin nombre';
+    porNombre.set(n, (porNombre.get(n) ?? 0) + 1);
+    // Hora local de Madrid: la boda es aquí, y +02:00 en septiembre.
+    const h = new Date(r.created_at + 2 * 3600_000).toISOString().slice(11, 13);
+    porHora.set(h, (porHora.get(h) ?? 0) + 1);
+  }
+
+  // El espacio sale de R2, no de la base: así no hay que guardar tamaños.
+  let bytes = 0, objetos = 0, cursor: string | undefined;
+  do {
+    const lote: R2Objects = await env.MEDIA.list({ limit: 1000, cursor });
+    for (const o of lote.objects) { bytes += o.size; objetos++; }
+    cursor = lote.truncated ? lote.cursor : undefined;
+  } while (cursor);
+
+  return jsonAdmin({
+    total: filas.length,
+    visibles: filas.filter((r) => r.oculta !== 1).length,
+    ocultas: filas.filter((r) => r.oculta === 1).length,
+    fotos: filas.filter((r) => r.tipo === 'foto' && r.oculta !== 1).length,
+    videos: filas.filter((r) => r.tipo === 'video' && r.oculta !== 1).length,
+    invitados: filas.filter((r) => r.origen === 'invitado' && r.oculta !== 1).length,
+    oficiales: filas.filter((r) => r.origen === 'oficial' && r.oculta !== 1).length,
+    personas: porNombre.size,
+    ranking: [...porNombre.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
+      .map(([nombre, n]) => ({ nombre, n })),
+    porHora: [...porHora.entries()].sort().map(([hora, n]) => ({ hora, n })),
+    almacenamiento: { bytes, objetos, limiteBytes: 10 * 1024 ** 3 },
+  }, env);
+}
+
+// ── POST /admin/limpiar-parciales ─────────────────────────────────────
+// Vídeos que se quedaron a medias dejan trozos ocupando sitio en R2 sin
+// aparecer en ninguna parte.
+async function adminLimpiarParciales(_req: Request, env: Env): Promise<Response> {
+  const limite = Date.now() - 24 * 3600_000;
+  const { results } = await env.DB.prepare(
+    'select id, key, upload_id from subidas_parciales where created_at < ?'
+  ).bind(limite).all();
+  const filas = (results ?? []) as any[];
+
+  for (const f of filas) {
+    await r2Client(env).fetch(
+      r2Url(env, f.key, `uploadId=${encodeURIComponent(f.upload_id)}`), { method: 'DELETE' }
+    ).catch(() => {});
+    await env.DB.prepare('delete from subidas_parciales where id = ?').bind(f.id).run();
+  }
+  return jsonAdmin({ ok: true, limpiadas: filas.length }, env);
 }
 
 // ── Router ────────────────────────────────────────────────────────────
@@ -357,7 +550,19 @@ export default {
       if (pathname === '/firmar'      && req.method === 'POST') return await firmar(req, env);
       if (pathname === '/completar'   && req.method === 'POST') return await completar(req, env);
       if (pathname === '/borrar'      && req.method === 'POST') return await borrar(req, env);
-      if (pathname === '/moderar'     && req.method === 'POST') return await moderar(req, env);
+
+      if (pathname.startsWith('/admin/')) {
+        if (!(await esAdmin(req, env))) return error('no autorizado', env, 401);
+        if (pathname === '/admin/login'     && req.method === 'POST') return jsonAdmin({ ok: true }, env);
+        if (pathname === '/admin/media'     && req.method === 'GET')  return await adminMedia(req, env);
+        if (pathname === '/admin/stats'     && req.method === 'GET')  return await adminStats(req, env);
+        if (pathname === '/admin/ocultar'   && req.method === 'POST') return await adminOcultar(req, env);
+        if (pathname === '/admin/eliminar'  && req.method === 'POST') return await adminEliminar(req, env);
+        if (pathname === '/admin/categoria' && req.method === 'POST') return await adminCategoria(req, env);
+        if (pathname === '/admin/limpiar-parciales' && req.method === 'POST') {
+          return await adminLimpiarParciales(req, env);
+        }
+      }
     } catch (err) {
       return error(`fallo interno: ${err}`, env, 500);
     }

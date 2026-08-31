@@ -1,3 +1,4 @@
+// El panel de los novios tiene su propia suite en panel.spec.mjs.
 import { chromium } from 'playwright';
 const BASE = 'http://127.0.0.1:4321';
 const fallos = [];
@@ -26,28 +27,7 @@ console.log('\nMURAL');
   await p.close();
 }
 
-console.log('\nPANEL DE MODERACIÓN');
-{
-  const p = await ctx.newPage();
-  p.on('pageerror', (e) => mal('error JS en panel: ' + e.message));
-  let moderarCon = null;
-  await p.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items }) }));
-  await p.route('**/moderar', async (r) => { moderarCon = JSON.parse(r.request().postData()); await r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
-  await p.goto(BASE + '/admin-68895abc/', { waitUntil: 'networkidle' });
-  (await p.locator('.celda').count()) === 0 ? ok('no muestra nada sin contraseña') : mal('mostró fotos sin contraseña');
-  await p.fill('#pw', 'secreta');
-  await p.click('#entrar');
-  await p.waitForSelector('.celda', { timeout: 5000 });
-  (await p.locator('.celda').count()) === 2 ? ok('lista las fotos tras entrar') : mal('no listó las fotos');
-  (await p.locator('.quien b').count()) === 0 ? ok('el nombre no se interpreta como HTML') : mal('¡HTML inyectado en el panel!');
-  await p.locator('.celda button').first().click();
-  await p.waitForTimeout(600);
-  moderarCon?.password === 'secreta' && moderarCon?.ocultar === true ? ok('envía la orden de ocultar con contraseña') : mal('petición incorrecta: ' + JSON.stringify(moderarCon));
-  (await p.locator('.celda.oculta').count()) === 1 ? ok('marca la foto como oculta') : mal('no marcó la foto');
-  await p.close();
-}
-
 await nav.close();
 console.log('\n' + '─'.repeat(52));
-console.log(fallos.length ? '❌ ' + fallos.length + ' fallo(s)' : '✅ Mural y panel correctos');
+console.log(fallos.length ? '❌ ' + fallos.length + ' fallo(s)' : '✅ Mural correcto');
 process.exit(fallos.length ? 1 : 0);

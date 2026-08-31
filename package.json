@@ -10,13 +10,14 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "node tests/galeria.spec.mjs && node tests/resiliencia.spec.mjs && node tests/video.spec.mjs && node tests/mural-admin.spec.mjs"
+    "test": "node tests/galeria.spec.mjs && node tests/resiliencia.spec.mjs && node tests/video.spec.mjs && node tests/mural.spec.mjs && node tests/panel.spec.mjs"
   },
   "dependencies": {
-    "astro": "^6.1.4"
+    "astro": "^6.1.4",
+    "client-zip": "^2.5.0"
   },
   "devDependencies": {
-    "typescript": "^5.9.2",
-    "playwright": "^1.62.1"
+    "playwright": "^1.62.1",
+    "typescript": "^5.9.2"
   }
 }
