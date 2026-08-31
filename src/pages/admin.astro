@@ -782,7 +782,7 @@
       $('progresoTxt').textContent = `Listo: ${r.hechos} al reportaje`;
       setTimeout(() => { cola.limpiarHechos(); recargar(); }, 2500);
     } else {
-      const partes = [`${r.hechos} de ${r.total}`];
+      const partes = [`${r.hechos} de ${r.total} listas`];
       if (r.reintentando) partes.push('reintentando');
       if (r.fallidos) partes.push(`${r.fallidos} sin subir`);
       $('progresoTxt').textContent = partes.join(' · ');

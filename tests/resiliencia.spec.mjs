@@ -180,6 +180,51 @@ console.log('\nD) La red se queda colgada a mitad de una subida');
   await ctx.close();
 }
 
+// ══ E. Restos de una sesión anterior no deben inflar el contador ══════
+console.log('\nE) Vuelves a subir tras una sesión anterior');
+{
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  let subidas = 0;
+
+  const rutas = async (page) => {
+    await page.route('**/firmar', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify({ id: 'x', subidas: [
+        { rol: 'thumb', key: 'invitados/x/thumb.webp', url: `${BASE}/__put/t` },
+        { rol: 'web',   key: 'invitados/x/web.webp',   url: `${BASE}/__put/w` }]}) }));
+    await page.route('**/__put/**', (r) => { subidas++; return r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' }); });
+    await page.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+  };
+
+  // Sesión 1: sube 2 fotos y se cierra la pestaña ANTES de que se limpien.
+  const p1 = await nuevaPagina(ctx);
+  await rutas(p1);
+  await p1.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p1.setInputFiles('#selector', [
+    { name: 'a.jpg', mimeType: 'image/jpeg', buffer: FOTO },
+    { name: 'b.jpg', mimeType: 'image/jpeg', buffer: FOTO },
+  ]);
+  await rellenarNombre(p1, 'Ander');
+  await p1.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 60000 });
+  await p1.close();   // se cierra antes de los 3,5 s de limpieza
+  ok('sesión 1: 2 fotos subidas y pestaña cerrada al momento');
+
+  // Sesión 2: sube 1 sola. El contador debe decir 1, no 3.
+  const p2 = await nuevaPagina(ctx);
+  await rutas(p2);
+  await p2.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p2.waitForTimeout(1200);
+  const alEntrar = await p2.locator('#progresoTexto').textContent();
+  (alEntrar ?? '').trim() === '' ? ok('al volver no arrastra el progreso viejo') : mal(`arrastra: "${alEntrar}"`);
+
+  await p2.setInputFiles('#selector', { name: 'c.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await p2.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 60000 });
+  const texto = await p2.locator('#progresoTexto').textContent();
+  texto?.includes('1 archivo') || texto?.includes('Ya está')
+    ? ok(`cuenta solo la nueva: "${texto}"`)
+    : mal(`el contador arrastra lo viejo: "${texto}"`);
+  await ctx.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(52)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Resiliencia correcta');

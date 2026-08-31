@@ -865,11 +865,13 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         return;
       }
 
+      // «Subiendo N de N» se leía como «terminado pero atascado». Se dice
+      // cuántas van LISTAS, que no es ambiguo.
       const partes: string[] = [];
-      if (r.subiendo || r.pendientes) partes.push(`Subiendo ${r.hechos + 1} de ${r.total}`);
+      if (r.subiendo || r.pendientes) partes.push(`Subiendo… ${r.hechos} de ${r.total} listas`);
       if (r.reintentando) partes.push('reintentando');
       if (r.fallidos) partes.push(r.fallidos === 1 ? '1 foto fallida' : `${r.fallidos} fotos fallidas`);
-      texto.textContent = partes.join(' · ') || `${r.hechos} de ${r.total}`;
+      texto.textContent = partes.join(' · ') || `${r.hechos} de ${r.total} listas`;
 
       // Decir POR QUÉ falló: no es lo mismo quedarse sin cobertura que subir
       // un archivo que el servidor rechaza.

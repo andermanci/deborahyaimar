@@ -28,9 +28,16 @@ const PLAZO_API = 20_000;      // firmar / completar: son peticiones pequeñas
 const PLAZO_FOTO = 90_000;     // ~500 KB con cobertura mala
 const PLAZO_PARTE = 180_000;   // trozo de vídeo de 5 MB
 
-// Si un elemento lleva demasiado en «subiendo», es que su pestaña murió o su
-// petición se quedó colgada: se recupera para volver a intentarlo.
-const PLAZO_HUERFANO = 5 * 60_000;
+// Red de seguridad para elementos abandonados por una pestaña que murió. Es
+// deliberadamente generoso porque un vídeo grande tarda de verdad: 20 partes
+// de hasta 3 minutos. Lo que evita duplicados de verdad es `trabajando`, el
+// conjunto de lo que ESTA página está subiendo ahora mismo.
+const PLAZO_HUERFANO = 30 * 60_000;
+
+// Reintento periódico. Sin esto, recuperarse de un atasco dependía de que el
+// usuario cambiara de pestaña o le volviera la cobertura: si se quedaba
+// mirando la pantalla, la cola no se movía nunca.
+const LATIDO = 20_000;
 
 export type EstadoItem = 'pendiente' | 'subiendo' | 'hecho' | 'fallido';
 
@@ -143,6 +150,8 @@ export class ColaSubida {
   private api: string;
   private corriendo = false;
   private inicioRonda = 0;
+  /** Lo que esta página está subiendo AHORA: nunca debe reclamarse como huérfano. */
+  private trabajando = new Set<string>();
   private oyentes: ((r: ResumenCola) => void)[] = [];
 
   constructor(apiBase: string) {
@@ -158,6 +167,8 @@ export class ColaSubida {
     // Reduce el riesgo de que el navegador purgue la cola por falta de espacio.
     navigator.storage?.persist?.().catch(() => {});
 
+    setInterval(() => void this.procesar(), LATIDO);
+
     void this.iniciar();
   }
 
@@ -167,6 +178,13 @@ export class ColaSubida {
    * IndexedDB para siempre y nadie la retomaba.
    */
   private async iniciar(): Promise<void> {
+    // Los 'hecho' que sobreviven a una sesión ya los confirmó el servidor: solo
+    // servían para enseñar «¡Gracias!» unos segundos. Si la pestaña se cerró
+    // antes de limpiarlos, al volver inflaban el contador y aparecía un
+    // «6 de 6» habiendo subido 3.
+    const items = await leerTodo();
+    for (const item of items.filter((i) => i.estado === 'hecho')) await borrar(item.id);
+
     await this.recuperarHuerfanos(true);
     await this.avisar();
     void this.procesar();
@@ -181,6 +199,9 @@ export class ColaSubida {
     const items = await leerTodo();
     for (const item of items) {
       if (item.estado !== 'subiendo') continue;
+      // Si lo estamos subiendo nosotros, no es un huérfano por mucho que tarde.
+      // Sin esta guarda, un vídeo largo se reclamaba a mitad y se subía dos veces.
+      if (this.trabajando.has(item.id)) continue;
       const parado = Date.now() - (item.marcadoEn ?? 0);
       if (todos || parado > PLAZO_HUERFANO) {
         await guardar({ ...item, estado: 'pendiente' });
@@ -297,6 +318,7 @@ export class ColaSubida {
 
   private async subirItem(item: ItemCola): Promise<void> {
     await guardar({ ...item, estado: 'subiendo', marcadoEn: Date.now() });
+    this.trabajando.add(item.id);
     await this.avisar();
 
     try {
@@ -320,6 +342,8 @@ export class ColaSubida {
           reintentarEn: Date.now() + retardo(intentos),
         });
       }
+    } finally {
+      this.trabajando.delete(item.id);
     }
   }
 
