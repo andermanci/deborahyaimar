@@ -344,13 +344,9 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
   <!-- GALERÍA -->
   <div id="postBoda" hidden>
     <div class="pestanas" id="pestanas" role="tablist">
+      <!-- Invitados es fija; el resto se construye con las categorías que
+           los novios tengan creadas y que además tengan fotos. -->
       <button class="pestana activa" data-cat="invitados" role="tab" aria-selected="true">Invitados</button>
-      <button class="pestana" data-cat="todas"     role="tab" aria-selected="false" hidden>Reportaje</button>
-      <button class="pestana" data-cat="ceremonia" role="tab" aria-selected="false" hidden>Ceremonia</button>
-      <button class="pestana" data-cat="cocktail"  role="tab" aria-selected="false" hidden>Cóctel</button>
-      <button class="pestana" data-cat="comida"    role="tab" aria-selected="false" hidden>Comida</button>
-      <button class="pestana" data-cat="baile"     role="tab" aria-selected="false" hidden>Baile</button>
-      <button class="pestana" data-cat="momentos"  role="tab" aria-selected="false" hidden>Momentos</button>
     </div>
 
     <div class="rejilla-envoltorio">
@@ -460,11 +456,12 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
   function arrancar() {
     const rejilla = $('rejilla');
     const vacio = $('vacio');
-    const pestanas = Array.from(document.querySelectorAll<HTMLButtonElement>('.pestana'));
+    const contenedorPestanas = $('pestanas');
 
     let cat = 'invitados';
     let invitados: Item[] = [];
     let oficiales: Item[] = [];
+    let categorias: { slug: string; nombre: string }[] = [];
     let columnas: HTMLElement[] = [];
     let numColumnas = 0;
     const nodos = new Map<string, HTMLElement>();
@@ -723,17 +720,49 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     });
 
     // ── PESTAÑAS ──────────────────────────────────────────────────
-    pestanas.forEach((btn) => {
-      btn.addEventListener('click', () => {
-        pestanas.forEach((b) => { b.classList.remove('activa'); b.setAttribute('aria-selected', 'false'); });
-        btn.classList.add('activa'); btn.setAttribute('aria-selected', 'true');
-        cat = btn.dataset.cat!;
-        nodos.forEach((n) => n.remove()); nodos.clear();
-        numColumnas = 0;
-        pintar();
-        scrollTo({ top: 0, behavior: 'smooth' });
+    function activar(nueva: string) {
+      cat = nueva;
+      contenedorPestanas.querySelectorAll<HTMLButtonElement>('.pestana').forEach((b) => {
+        const suya = b.dataset.cat === nueva;
+        b.classList.toggle('activa', suya);
+        b.setAttribute('aria-selected', String(suya));
       });
-    });
+      nodos.forEach((n) => n.remove()); nodos.clear();
+      numColumnas = 0;
+      pintar();
+      scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function nuevaPestana(slug: string, nombre: string): HTMLButtonElement {
+      const b = document.createElement('button');
+      b.className = 'pestana';
+      b.type = 'button';
+      b.dataset.cat = slug;
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(slug === cat));
+      if (slug === cat) b.classList.add('activa');
+      b.textContent = nombre;   // texto plano: lo escriben los novios
+      b.addEventListener('click', () => activar(slug));
+      return b;
+    }
+
+    /** Solo se enseñan las categorías que tienen fotos: nada de pestañas vacías. */
+    function pintarPestanas() {
+      const conFotos = categorias.filter((c) => oficiales.some((o) => o.categoria === c.slug));
+      const hayOficiales = oficiales.length > 0;
+
+      contenedorPestanas.replaceChildren();
+      contenedorPestanas.appendChild(nuevaPestana('invitados', 'Invitados'));
+      if (hayOficiales) {
+        contenedorPestanas.appendChild(nuevaPestana('todas', 'Reportaje'));
+        for (const c of conFotos) contenedorPestanas.appendChild(nuevaPestana(c.slug, c.nombre));
+      }
+      contenedorPestanas.classList.toggle('visible', hayOficiales);
+
+      // Si la pestaña abierta ha dejado de existir, se vuelve a Invitados.
+      const sigue = ['invitados', 'todas'].includes(cat) || conFotos.some((c) => c.slug === cat);
+      if (!sigue) activar('invitados');
+    }
 
     // ── DATOS ─────────────────────────────────────────────────────
     // Siempre la MISMA URL, y `no-store` para que el navegador no guarde copia.
@@ -764,18 +793,25 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       } catch { return null; }
     }
 
+    async function traerCategorias(): Promise<void> {
+      try {
+        const res = await fetch(`${API}/categorias.json`, { cache: 'no-store' });
+        if (!res.ok) return;
+        const d = await res.json();
+        if (Array.isArray(d.categorias)) categorias = d.categorias;
+      } catch { /* si falla, se queda con las que ya tenía */ }
+    }
+
     let primeraCarga = true;
     async function refrescar(forzar = false) {
       const [inv, ofi] = await Promise.all([traer('invitado', forzar), traer('oficial', forzar)]);
+      if (primeraCarga || forzar) await traerCategorias();
       const antes = invitados.length;
       // Ante un fallo de red, conservar lo que ya había: nunca vaciar la galería.
       if (inv) invitados = inv;
       if (ofi) oficiales = ofi;
 
-      const hayOficiales = oficiales.length > 0;
-      pestanas.forEach((b) => { if (b.dataset.cat !== 'invitados') b.hidden = !hayOficiales; });
-      $('pestanas').classList.toggle('visible', hayOficiales);
-
+      pintarPestanas();
       pintar();
 
       if (!primeraCarga && cat === 'invitados' && invitados.length > antes) {

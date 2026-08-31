@@ -24,6 +24,10 @@
     :root {
       --s1:.25rem; --s2:.5rem; --s3:.75rem; --s4:1rem; --s5:1.5rem; --s6:2rem; --s7:3rem;
       --barra-h: 52px;
+      /* Un único margen lateral para todo. Antes la rejilla y las tarjetas del
+         resumen colgaban 8 px más a la izquierda que las pestañas y los
+         bloques, y se notaba el escalón al cambiar de sección. */
+      --lado: 1rem;
     }
     body { background: var(--cream); padding-bottom: 2rem; }
     /* Solo hace falta hueco extra cuando la barra de lote tapa el final. */
@@ -61,7 +65,7 @@
     .barra {
       position: sticky; top: 0; z-index: 100;
       display: flex; align-items: center; justify-content: space-between; gap: var(--s3);
-      padding: 0 var(--s4); height: var(--barra-h);
+      padding: 0 var(--lado); height: var(--barra-h);
       background: rgba(250,248,244,.9); backdrop-filter: blur(14px);
       border-bottom: 1px solid var(--border);
     }
@@ -86,13 +90,13 @@
 
     .secciones {
       display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none;
-      padding: var(--s3) var(--s4); position: sticky; top: var(--barra-h); z-index: 90;
+      padding: var(--s3) var(--lado); position: sticky; top: var(--barra-h); z-index: 90;
       background: rgba(250,248,244,.94); backdrop-filter: blur(14px);
       /* Difumina los extremos para que se vea que hay más pestañas al lado.
          Antes se cortaban en seco y parecía un fallo de maquetación. */
       -webkit-mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
       mask-image: linear-gradient(90deg, transparent, #000 18px, #000 calc(100% - 18px), transparent);
-      scroll-padding-inline: var(--s4);
+      scroll-padding-inline: var(--lado);
     }
     .secciones::-webkit-scrollbar { display: none; }
     .seccion {
@@ -107,7 +111,7 @@
     /* Una sola fila que se desplaza: en móvil, tres desplegables apilados
        comían un tercio de la pantalla antes de ver una sola foto. */
     .filtros {
-      display: flex; gap: var(--s2); padding: 0 var(--s4) var(--s3);
+      display: flex; gap: var(--s2); padding: 0 var(--lado) var(--s3);
       overflow-x: auto; scrollbar-width: none;
       -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
       mask-image: linear-gradient(90deg, #000 calc(100% - 18px), transparent);
@@ -120,7 +124,7 @@
     }
 
     /* ── REJILLA ─────────────────────────────────────────────────── */
-    .contenido { padding: 0 var(--s2) var(--s6); max-width: 1500px; margin: 0 auto; }
+    .contenido { padding: var(--s3) var(--lado) var(--s6); max-width: 1500px; margin: 0 auto; }
     .rejilla { display: flex; gap: var(--s2); align-items: flex-start; }
     .columna { flex: 1 1 0; display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
 
@@ -165,7 +169,7 @@
     .lote .boton { padding: .75rem 1.2rem; font-size: .64rem; }
 
     /* ── ESTADÍSTICAS ────────────────────────────────────────────── */
-    .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s3); padding: 0 var(--s2); }
+    .tarjetas { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s3); }
     .tarjeta-dato {
       background: #fff; border: 1px solid var(--border); border-radius: 14px;
       padding: var(--s4); text-align: center;
@@ -173,10 +177,10 @@
     .dato-num { font-size: 2rem; font-weight: 200; color: var(--dark); line-height: 1; }
     .dato-lbl { font-size: .6rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gray); margin-top: var(--s2); }
 
-    .bloque { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: var(--s5); margin: var(--s4) var(--s2) 0; }
+    .bloque { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: var(--s5); }
+    .bloque + .bloque, .tarjetas + .bloque { margin-top: var(--s4); }
     /* Un desplegable o una zona de soltar no ganan nada por medir 1900 px. */
-    .columna-estrecha { max-width: 620px; margin-inline: auto; padding-inline: var(--s2); }
-    .columna-estrecha .bloque { margin-inline: 0; }
+    .columna-estrecha { max-width: 620px; margin-inline: auto; }
     .bloque h3 { font-size: .66rem; letter-spacing: .16em; text-transform: uppercase; color: var(--gray); font-weight: 400; margin-bottom: var(--s4); }
     .fila-rank { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s2); font-size: .82rem; }
     .fila-rank .nom { flex: none; width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -196,6 +200,7 @@
 
     /* ── SUBIDA DEL REPORTAJE ────────────────────────────────────── */
     .soltar {
+      margin-top: var(--s3);   /* tocaba la caja de categoría */
       /* Es un <button>, así que hay que reponer lo que el navegador le quita:
          ancho completo, disposición en columna y tipografía heredada. */
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -215,6 +220,25 @@
     .progreso-linea { height: 4px; background: var(--border); border-radius: 100px; overflow: hidden; margin-top: var(--s2); }
     .progreso-linea[hidden] { display: none !important; }
     .progreso-linea span { display: block; height: 100%; width: 0; background: var(--pink-deep); transition: width .3s; }
+
+    /* ── CATEGORÍAS ──────────────────────────────────────────────── */
+    .lista-cat { list-style: none; }
+    .fila-cat {
+      display: flex; align-items: center; gap: var(--s3);
+      padding: var(--s3) 0; border-bottom: 1px solid var(--border);
+    }
+    .fila-cat:last-child { border-bottom: none; }
+    .fila-cat .nom { flex: 1; font-size: .9rem; color: var(--dark); }
+    .fila-cat .cuantas { font-size: .72rem; color: var(--gray); flex: none; }
+    .fila-cat button {
+      flex: none; background: none; border: none; cursor: pointer; font-family: inherit;
+      font-size: .62rem; letter-spacing: .12em; text-transform: uppercase;
+      color: var(--err); text-decoration: underline; text-underline-offset: 3px;
+    }
+    .fila-nueva { display: flex; gap: var(--s2); }
+    .fila-nueva .campo { flex: 1; text-align: left; }
+    .fila-nueva .boton { flex: none; }
+    .vacio-cat { font-size: .85rem; color: var(--gray); padding: var(--s3) 0; }
 
     /* ── VISOR ───────────────────────────────────────────────────── */
     .visor { position: fixed; inset: 0; z-index: 300; display: none; background: rgba(12,6,9,.97); align-items: center; justify-content: center; }
@@ -276,6 +300,7 @@
       <button class="seccion" data-vista="papelera">Papelera <span class="cuenta" id="cPap"></span></button>
       <button class="seccion" data-vista="stats">Resumen</button>
       <button class="seccion" data-vista="subir">Subir reportaje</button>
+      <button class="seccion" data-vista="categorias">Categorías</button>
       <button class="seccion" data-vista="descargar">Descargar</button>
     </div>
 
@@ -320,13 +345,7 @@
       <section class="columna-estrecha" id="vistaSubir" hidden>
         <div class="bloque">
           <h3>Categoría</h3>
-          <select id="catSubida" class="campo" style="text-align:left">
-            <option value="ceremonia">Ceremonia</option>
-            <option value="cocktail">Cóctel</option>
-            <option value="comida">Comida</option>
-            <option value="baile">Baile</option>
-            <option value="momentos">Momentos</option>
-          </select>
+          <select id="catSubida" class="campo" style="text-align:left"></select>
         </div>
         <!-- El input va oculto de verdad y se abre por código. Con opacity:0
              seguía en el DOM: se copiaba con la página y los lectores de
@@ -345,6 +364,26 @@
         <div class="progreso-caja" id="progresoSubida" hidden>
           <span id="progresoTxt"></span>
           <div class="progreso-linea"><span id="progresoBar"></span></div>
+        </div>
+      </section>
+
+      <!-- CATEGORÍAS -->
+      <section class="columna-estrecha" id="vistaCategorias" hidden>
+        <div class="bloque">
+          <h3>Categorías del reportaje</h3>
+          <p class="medidor-txt" style="margin-bottom:1rem">
+            Son las pestañas que ven los invitados en la galería. Solo aparecen
+            las que tienen fotos.
+          </p>
+          <ul class="lista-cat" id="listaCat"></ul>
+        </div>
+        <div class="bloque">
+          <h3>Añadir una</h3>
+          <div class="fila-nueva">
+            <input class="campo" type="text" id="catNueva" placeholder="Por ejemplo: Photocall"
+                   maxlength="40" enterkeyhint="done" />
+            <button class="boton" id="btnCrearCat">Añadir</button>
+          </div>
         </div>
       </section>
 
@@ -384,7 +423,7 @@
 
 <script>
   import { AdminApi, NoAutorizado } from '../lib/adminApi';
-  import type { MediaAdmin } from '../lib/adminApi';
+  import type { MediaAdmin, Categoria } from '../lib/adminApi';
   import { procesar, ErrorMedio } from '../lib/media';
   import { ColaSubida } from '../lib/uploadQueue';
   import { downloadZip } from 'client-zip';
@@ -398,6 +437,7 @@
   let vista = 'invitados';
   let seleccion = new Set<string>();
   let modoSel = false;
+  let cats: Categoria[] = [];
 
   // ── ACCESO ────────────────────────────────────────────────────────
   // En el navegador solo se guarda el token, nunca la contraseña.
@@ -490,6 +530,7 @@
     const datos = await conSesion(() => api.media({ estado: 'todas' }));
     if (!datos) return;
     todo = datos.items;
+    void cargarCategorias();
     rellenarQuien();
     pintar();
     actualizarCuentas();
@@ -548,6 +589,7 @@
     $('rejilla').hidden = !esRejilla;
     $('vistaStats').hidden = vista !== 'stats';
     $('vistaSubir').hidden = vista !== 'subir';
+    $('vistaCategorias').hidden = vista !== 'categorias';
     $('vistaDescargar').hidden = vista !== 'descargar';
     if (!esRejilla) { $('vacioMsg').hidden = true; sincronizarLote(); return; }
 
@@ -636,6 +678,7 @@
       salirSeleccion();
       pintar();
       if (vista === 'stats') await pintarStats();
+      if (vista === 'categorias') await cargarCategorias();
       if (vista === 'descargar') pintarDescarga();
       scrollTo({ top: 0, behavior: 'smooth' });
     });
@@ -800,6 +843,93 @@
     if (!r) return;
     avisar(r.limpiadas ? `${r.limpiadas} subidas incompletas limpiadas` : 'No había nada que limpiar');
     await pintarStats();
+  });
+
+  // ── CATEGORÍAS ────────────────────────────────────────────────────
+  async function cargarCategorias() {
+    const datos = await conSesion(() => api.categorias());
+    if (!datos) return;
+    cats = datos.categorias;
+    pintarCategorias();
+    rellenarSelectCategorias();
+  }
+
+  function rellenarSelectCategorias() {
+    const sel = $('catSubida') as HTMLSelectElement;
+    const previo = sel.value;
+    sel.replaceChildren();
+    for (const c of cats) {
+      const o = document.createElement('option');
+      o.value = c.slug;
+      o.textContent = c.nombre;   // texto plano: lo escriben los novios
+      sel.appendChild(o);
+    }
+    if (cats.some((c) => c.slug === previo)) sel.value = previo;
+  }
+
+  function pintarCategorias() {
+    const lista = $('listaCat');
+    lista.replaceChildren();
+
+    if (!cats.length) {
+      const p = document.createElement('p');
+      p.className = 'vacio-cat';
+      p.textContent = 'No hay ninguna categoría todavía.';
+      lista.appendChild(p);
+      return;
+    }
+
+    for (const c of cats) {
+      const n = todo.filter((i) => i.categoria === c.slug).length;
+      const li = document.createElement('li');
+      li.className = 'fila-cat';
+
+      const nom = document.createElement('span');
+      nom.className = 'nom';
+      nom.textContent = c.nombre;
+
+      const cuantas = document.createElement('span');
+      cuantas.className = 'cuantas';
+      cuantas.textContent = n === 0 ? 'sin fotos' : n === 1 ? '1 foto' : `${n} fotos`;
+
+      const borrar = document.createElement('button');
+      borrar.textContent = 'Borrar';
+      borrar.addEventListener('click', async () => {
+        // Se dice cuántas fotos se quedan sin categoría, y que NO se borran.
+        const aviso = n === 0
+          ? `¿Borrar la categoría «${c.nombre}»?`
+          : `¿Borrar la categoría «${c.nombre}»?\n\n${n} ${n === 1 ? 'foto pasará' : 'fotos pasarán'} ` +
+            'al reportaje sin categoría. Las fotos NO se borran.';
+        if (!confirm(aviso)) return;
+
+        const r = await conSesion(() => api.borrarCategoria(c.slug));
+        if (!r) return;
+        avisar(r.fotosSinCategoria
+          ? `Categoría borrada · ${r.fotosSinCategoria} fotos sin categoría`
+          : 'Categoría borrada');
+        await cargarCategorias();
+        await recargar();
+      });
+
+      li.append(nom, cuantas, borrar);
+      lista.appendChild(li);
+    }
+  }
+
+  async function crearCategoria() {
+    const campo = $('catNueva') as HTMLInputElement;
+    const nombre = campo.value.trim();
+    if (!nombre) return;
+
+    const r = await conSesion(() => api.crearCategoria(nombre));
+    if (!r) return;
+    campo.value = '';
+    avisar(`Categoría «${r.nombre}» añadida`);
+    await cargarCategorias();
+  }
+  $('btnCrearCat').addEventListener('click', crearCategoria);
+  $('catNueva').addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Enter') crearCategoria();
   });
 
   // ── SUBIR REPORTAJE ───────────────────────────────────────────────

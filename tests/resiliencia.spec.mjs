@@ -22,7 +22,8 @@ async function nuevaPagina(ctx) {
   const page = await ctx.newPage();
   page.on('pageerror', (e) => mal(`error JS: ${e.message}`));
   await page.clock.install({ time: new Date('2026-09-12T18:00:00+02:00') });
-  await page.route('**/indice.json*', (r) =>
+  await page.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+await page.route('**/indice.json*', (r) =>
     r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }));
   return page;
 }

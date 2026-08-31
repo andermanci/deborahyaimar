@@ -18,6 +18,7 @@ const navegador = await chromium.launch({ channel: 'chrome', args: ['--autoplay-
 const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
 const page = await ctx.newPage();
 page.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+await page.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
 await page.route('**/indice.json*', (r) =>
   r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
 

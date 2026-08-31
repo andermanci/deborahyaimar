@@ -16,6 +16,7 @@ const foto = (id, extra = {}) => ({
 });
 
 let datos = [];
+let categorias = [{ slug: 'ceremonia', nombre: 'Ceremonia' }, { slug: 'baile', nombre: 'Baile' }];
 const peticiones = [];
 
 /** El acceso ahora pide usuario y contraseña. */
@@ -33,7 +34,9 @@ async function nuevaPagina() {
   page.on('pageerror', (e) => mal(`error JS: ${e.message}`));
   // Ojo: el panel vive en /admin/, así que un glob '**/admin/**' interceptaría
   // también la navegación a la página. Se enumeran las rutas de la API.
-  await page.route(/\/admin\/(login|media|stats|ocultar|eliminar|categoria|limpiar-parciales)\b/, async (r) => {
+  await page.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ categorias }) }));
+  await page.route(/\/admin\/(login|media|stats|ocultar|eliminar|categoria|categorias|limpiar-parciales)\b/, async (r) => {
     const req = r.request();
     const url = new URL(req.url());
     peticiones.push({ ruta: url.pathname, cuerpo: req.postData() ? JSON.parse(req.postData()) : null,
@@ -59,6 +62,18 @@ async function nuevaPagina() {
       porHora: [{ hora: '19', n: 1 }, { hora: '20', n: 2 }],
       almacenamiento: { bytes: 2 * 1024 ** 3, objetos: 8, limiteBytes: 10 * 1024 ** 3 },
     }) });
+    if (url.pathname === '/admin/categorias') {
+      const c = JSON.parse(req.postData() ?? '{}');
+      const slug = c.nombre.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-');
+      categorias = [...categorias, { slug, nombre: c.nombre }];
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, slug, nombre: c.nombre }) });
+    }
+    if (url.pathname === '/admin/categorias/borrar') {
+      const c = JSON.parse(req.postData() ?? '{}');
+      const n = datos.filter((d) => d.categoria === c.slug).length;
+      categorias = categorias.filter((x) => x.slug !== c.slug);
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, fotosSinCategoria: n }) });
+    }
     return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
   });
   return page;
@@ -284,6 +299,54 @@ console.log('\n7) Descargar el álbum');
     const d = await descarga;
     d.suggestedFilename().endsWith('.zip') ? ok(`genera el ZIP («${d.suggestedFilename()}»)`) : mal(`nombre raro: ${d.suggestedFilename()}`);
   } catch { mal('no llegó a descargar el ZIP'); }
+  await page.close();
+}
+
+// ══ 8. Categorías ════════════════════════════════════════════════════
+console.log('\n8) Crear y borrar categorías');
+{
+  categorias = [{ slug: 'ceremonia', nombre: 'Ceremonia' }, { slug: 'baile', nombre: 'Baile' }];
+  const page = await nuevaPagina();
+  datos = [foto('c1', { origen: 'oficial', categoria: 'baile' }), foto('c2', { origen: 'oficial', categoria: 'baile' })];
+  await page.goto(PANEL, { waitUntil: 'networkidle' });
+  await entrarEn(page);
+  await page.waitForSelector('#panel:not([hidden])', { timeout: 8000 });
+  await page.waitForTimeout(700);
+
+  await page.click('.seccion[data-vista="categorias"]');
+  await page.waitForTimeout(700);
+  (await page.locator('.fila-cat').count()) === 2 ? ok('lista las categorías existentes') : mal('no las lista');
+  const conteo = await page.locator('.fila-cat').nth(1).locator('.cuantas').textContent();
+  conteo === '2 fotos' ? ok('dice cuántas fotos tiene cada una') : mal(`conteo: ${conteo}`);
+  (await page.locator('.fila-cat').first().locator('.cuantas').textContent()) === 'sin fotos'
+    ? ok('y marca las vacías') : mal('no marca las vacías');
+
+  // Crear
+  await page.fill('#catNueva', 'Photocall');
+  await page.click('#btnCrearCat');
+  await page.waitForTimeout(900);
+  (await page.locator('.fila-cat').count()) === 3 ? ok('crear añade una nueva') : mal('no se añadió');
+  const creada = peticiones.find((x) => x.ruta === '/admin/categorias');
+  creada?.cuerpo?.nombre === 'Photocall' ? ok('manda el nombre escrito') : mal(`petición: ${JSON.stringify(creada)}`);
+  (await page.locator('#catNueva').inputValue()) === '' ? ok('vacía el campo tras crear') : mal('no vacía el campo');
+
+  // Borrar una CON fotos: debe avisar de que las fotos NO se borran
+  let textoAviso = '';
+  page.once('dialog', async (d) => { textoAviso = d.message(); await d.accept(); });
+  await page.locator('.fila-cat').nth(1).locator('button').click();
+  await page.waitForTimeout(1200);
+  textoAviso.includes('NO se borran') && textoAviso.includes('2 fotos')
+    ? ok('al borrar, avisa de cuántas fotos y de que no se pierden')
+    : mal(`aviso: "${textoAviso}"`);
+  (await page.locator('.fila-cat').count()) === 2 ? ok('la categoría desaparece') : mal('sigue ahí');
+
+  // El desplegable de subida se alimenta de la lista
+  await page.click('.seccion[data-vista="subir"]');
+  await page.waitForTimeout(600);
+  const opciones = await page.locator('#catSubida option').allTextContents();
+  opciones.includes('Photocall') && !opciones.includes('Baile')
+    ? ok(`el desplegable de subida se actualiza (${opciones.join(', ')})`)
+    : mal(`opciones: ${opciones.join(', ')}`);
   await page.close();
 }
 

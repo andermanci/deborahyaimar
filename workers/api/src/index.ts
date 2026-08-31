@@ -38,8 +38,6 @@ const MAX_PARTES = 20;               // → 100 MB de vídeo como techo
 const TTL_INDICE = 15;               // segundos de frescura del índice
 const FIRMA_TTL = 6 * 3600;          // 6 h: una subida lenta jamás caduca a medias
 
-const CATEGORIAS = ['ceremonia', 'cocktail', 'comida', 'baile', 'momentos'];
-
 const ROLES = ['thumb', 'web', 'poster', 'video'] as const;
 type Rol = (typeof ROLES)[number];
 
@@ -305,7 +303,7 @@ async function completar(req: Request, env: Env): Promise<Response> {
   if (origen === 'oficial' && !(await esAdmin(req, env))) {
     return error('no autorizado para subir al reportaje', env, 403);
   }
-  const categoria = origen === 'oficial' && CATEGORIAS.includes(body?.categoria)
+  const categoria = origen === 'oficial' && await existeCategoria(env, body?.categoria)
     ? body.categoria : null;
 
   // Las claves las generó el servidor bajo <origen>/<id>/: verifica que
@@ -356,6 +354,80 @@ async function completar(req: Request, env: Env): Promise<Response> {
   ).run();
 
   return json({ ok: true, id }, env);
+}
+
+// ── Categorías ────────────────────────────────────────────────────────
+
+async function existeCategoria(env: Env, slug: unknown): Promise<boolean> {
+  if (typeof slug !== 'string' || !slug) return false;
+  const fila = await env.DB.prepare('select 1 as x from categorias where slug = ?').bind(slug).first();
+  return Boolean(fila);
+}
+
+/** Convierte «Baile de después» en «baile-de-despues», que es lo que va en la URL. */
+function aSlug(texto: string): string {
+  return texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+}
+
+/** Público: la galería construye sus pestañas con esto. */
+async function categorias(req: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const cache = caches.default;
+  const cacheada = await cache.match(req);
+  if (cacheada) {
+    const fecha = Date.parse(cacheada.headers.get('date') ?? '');
+    const edad = Number.isFinite(fecha) ? (Date.now() - fecha) / 1000 : Infinity;
+    if (edad < TTL_INDICE) return cacheada;
+  }
+
+  const { results } = await env.DB.prepare(
+    'select slug, nombre from categorias order by orden, nombre'
+  ).all();
+  const res = json({ categorias: results ?? [] }, env, 200, {
+    'Cache-Control': `public, max-age=0, s-maxage=${TTL_INDICE}`,
+  });
+  ctx.waitUntil(cache.put(req, res.clone()));
+  return res;
+}
+
+// ── POST /admin/categorias ────────────────────────────────────────────
+async function adminCrearCategoria(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const nombre = typeof body?.nombre === 'string' ? body.nombre.trim() : '';
+  if (!nombre || nombre.length > 40) return error('nombre inválido', env);
+  const slug = aSlug(nombre);
+  if (!slug) return error('ese nombre no da un identificador válido', env);
+  if (await existeCategoria(env, slug)) return error('ya existe una categoría así', env, 409);
+
+  const { results } = await env.DB.prepare('select max(orden) as m from categorias').all();
+  const orden = Number((results?.[0] as any)?.m ?? 0) + 1;
+
+  await env.DB.prepare('insert into categorias (slug, nombre, orden) values (?, ?, ?)')
+    .bind(slug, nombre, orden).run();
+  return jsonAdmin({ ok: true, slug, nombre }, env);
+}
+
+// ── POST /admin/categorias/borrar ─────────────────────────────────────
+// Nunca borra fotos: las que estuvieran dentro se quedan en el reportaje sin
+// categoría. Perder una categoría por error no puede costar imágenes.
+async function adminBorrarCategoria(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const slug = body?.slug;
+  if (!(await existeCategoria(env, slug))) return error('esa categoría no existe', env, 404);
+
+  const fila = await env.DB.prepare('select count(*) as n from media where categoria = ?')
+    .bind(slug).first<{ n: number }>();
+  const afectadas = Number(fila?.n ?? 0);
+
+  await env.DB.batch([
+    env.DB.prepare('update media set categoria = null where categoria = ?').bind(slug),
+    env.DB.prepare('delete from categorias where slug = ?').bind(slug),
+  ]);
+  return jsonAdmin({ ok: true, fotosSinCategoria: afectadas }, env);
 }
 
 // ── GET /indice.json ──────────────────────────────────────────────────
@@ -545,8 +617,8 @@ async function adminCategoria(req: Request, env: Env): Promise<Response> {
 
   const ids = leerIds(body);
   if (!ids) return error('lista de ids inválida', env);
-  const cat = body?.categoria;
-  if (cat !== null && !CATEGORIAS.includes(cat)) return error('categoría desconocida', env);
+  const cat = body?.categoria ?? null;
+  if (cat !== null && !(await existeCategoria(env, cat))) return error('categoría desconocida', env);
 
   await env.DB.batch(
     ids.map((id) => env.DB.prepare('update media set categoria = ? where id = ?').bind(cat, id))
@@ -642,6 +714,9 @@ export default {
       if (pathname === '/firmar'      && req.method === 'POST') return await firmar(req, env);
       if (pathname === '/completar'   && req.method === 'POST') return await completar(req, env);
       if (pathname === '/borrar'      && req.method === 'POST') return await borrar(req, env);
+      if (pathname === '/categorias.json' && (req.method === 'GET' || req.method === 'HEAD')) {
+        return await categorias(req, env, ctx);
+      }
 
       if (pathname === '/admin/login' && req.method === 'POST') return await login(req, env);
 
@@ -652,6 +727,8 @@ export default {
         if (pathname === '/admin/ocultar'   && req.method === 'POST') return await adminOcultar(req, env);
         if (pathname === '/admin/eliminar'  && req.method === 'POST') return await adminEliminar(req, env);
         if (pathname === '/admin/categoria' && req.method === 'POST') return await adminCategoria(req, env);
+        if (pathname === '/admin/categorias' && req.method === 'POST') return await adminCrearCategoria(req, env);
+        if (pathname === '/admin/categorias/borrar' && req.method === 'POST') return await adminBorrarCategoria(req, env);
         if (pathname === '/admin/limpiar-parciales' && req.method === 'POST') {
           return await adminLimpiarParciales(req, env);
         }

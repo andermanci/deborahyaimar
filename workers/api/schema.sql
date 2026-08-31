@@ -30,3 +30,18 @@ create table if not exists subidas_parciales (
   upload_id   text not null,
   created_at  integer not null
 );
+
+-- Categorías del reportaje. Antes estaban fijas en el código; ahora las
+-- gestionan los novios desde el panel.
+create table if not exists categorias (
+  slug   text primary key,          -- identificador en la URL y en media.categoria
+  nombre text not null,             -- lo que se ve en la galería
+  orden  integer not null default 0
+);
+
+insert or ignore into categorias (slug, nombre, orden) values
+  ('ceremonia', 'Ceremonia', 1),
+  ('cocktail',  'Cóctel',    2),
+  ('comida',    'Comida',    3),
+  ('baile',     'Baile',     4),
+  ('momentos',  'Momentos',  5);

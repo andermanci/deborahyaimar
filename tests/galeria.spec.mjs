@@ -35,6 +35,7 @@ const indice = { items: [
     thumb: `${BASE}/foto3.jpg`, web: `${BASE}/nope.mp4`, poster: `${BASE}/foto3.jpg`, duracion: 12, ancho: 1080, alto: 1920, ts: 1 },
 ]};
 
+await page.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
 await page.route('**/indice.json*', (r) =>
   r.fulfill({ status: 200, contentType: 'application/json',
     body: JSON.stringify(r.request().url().includes('oficial') ? { items: [] } : indice) }));
@@ -200,6 +201,7 @@ console.log('\n9) Tras subir, la foto aparece sin recargar');
 
   const urlsIndice = [];
   let hayFoto = false;
+  await p2.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
   await p2.route('**/indice.json*', (r) => {
     const u = r.request().url();
     if (!u.includes('oficial')) urlsIndice.push(u);
@@ -238,6 +240,42 @@ console.log('\n9) Tras subir, la foto aparece sin recargar');
     ? ok('el sondeo periódico NO la salta (sigue protegiendo el día de la boda)')
     : mal('¡el sondeo lleva cache-buster!');
   await p2.close();
+}
+
+// ── 10. Pestañas construidas con las categorías de los novios ────────
+console.log('\n10) Las pestañas salen de las categorías reales');
+{
+  const p3 = await ctx.newPage();
+  p3.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+
+  const oficiales = [
+    { id:'o1', tipo:'foto', categoria:'baile', nombre:'', deviceHash:'', thumb:`${BASE}/foto2.jpg`,
+      web:`${BASE}/foto2.jpg`, poster:null, duracion:null, ancho:1200, alto:800, ts:3 },
+    { id:'o2', tipo:'foto', categoria:'photocall', nombre:'', deviceHash:'', thumb:`${BASE}/foto3.jpg`,
+      web:`${BASE}/foto3.jpg`, poster:null, duracion:null, ancho:1200, alto:800, ts:2 },
+  ];
+  await p3.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ categorias: [
+      { slug: 'ceremonia', nombre: 'Ceremonia' },   // sin fotos: no debe salir
+      { slug: 'baile', nombre: 'Baile' },
+      { slug: 'photocall', nombre: 'Photocall' },
+    ] }) }));
+  await p3.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ items: r.request().url().includes('oficial') ? oficiales : [] }) }));
+
+  await p3.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p3.waitForSelector('.pestana[data-cat="baile"]', { timeout: 10000 })
+    .then(() => ok('crea la pestaña de una categoría nueva')).catch(() => mal('no la crea'));
+
+  const nombres = await p3.locator('.pestana').allTextContents();
+  nombres.includes('Photocall') ? ok(`usa el nombre escrito por los novios (${nombres.join(' · ')})`) : mal(`pestañas: ${nombres}`);
+  !nombres.includes('Ceremonia') ? ok('NO enseña categorías vacías') : mal('enseña una categoría sin fotos');
+  nombres[0] === 'Invitados' ? ok('Invitados sigue la primera') : mal(`primera: ${nombres[0]}`);
+
+  await p3.click('.pestana[data-cat="photocall"]');
+  await p3.waitForTimeout(600);
+  (await p3.locator('.tarjeta').count()) === 1 ? ok('filtra por esa categoría') : mal('no filtra bien');
+  await p3.close();
 }
 
 await navegador.close();

@@ -26,6 +26,11 @@ export interface MediaAdmin {
   ts: number;
 }
 
+export interface Categoria {
+  slug: string;
+  nombre: string;
+}
+
 export interface Estadisticas {
   total: number; visibles: number; ocultas: number;
   fotos: number; videos: number;
@@ -128,6 +133,23 @@ export class AdminApi {
   categoria(ids: string[], categoria: string | null) {
     return this.pedir<{ afectados: number }>('/admin/categoria', {
       method: 'POST', body: JSON.stringify({ ids, categoria }),
+    });
+  }
+
+  categorias() {
+    return this.pedir<{ categorias: Categoria[] }>('/categorias.json');
+  }
+
+  crearCategoria(nombre: string) {
+    return this.pedir<{ slug: string; nombre: string }>('/admin/categorias', {
+      method: 'POST', body: JSON.stringify({ nombre }),
+    });
+  }
+
+  /** No borra fotos: las que hubiera dentro se quedan sin categoría. */
+  borrarCategoria(slug: string) {
+    return this.pedir<{ fotosSinCategoria: number }>('/admin/categorias/borrar', {
+      method: 'POST', body: JSON.stringify({ slug }),
     });
   }
 
