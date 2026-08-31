@@ -87,6 +87,8 @@ export interface ResumenCola {
   fallidos: number;
   pendientes: number;
   reintentando: number;   // pendientes que ya fallaron alguna vez
+  sinConexion: boolean;   // la cola está parada esperando cobertura
+  ultimoError?: string;   // motivo del último fallo, aunque aún esté reintentando
   items: ItemCola[];
 }
 
@@ -124,17 +126,30 @@ const leerTodo = () => tx<ItemCola[]>('readonly', (s) => s.getAll());
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** fetch con plazo. Sin esto, una petición colgada mata la cola entera. */
-async function fetchConPlazo(url: string, opciones: RequestInit, ms: number): Promise<Response> {
+/** Se lanza cuando el usuario para la subida a propósito. */
+export class Cancelado extends Error {}
+
+/**
+ * fetch con plazo y con cancelación.
+ * Sin plazo, una petición colgada mata la cola entera; sin señal externa, el
+ * botón de parar no podría cortar lo que ya está en vuelo.
+ */
+async function fetchConPlazo(
+  url: string, opciones: RequestInit, ms: number, externa?: AbortSignal,
+): Promise<Response> {
   const ctrl = new AbortController();
+  const cortar = () => ctrl.abort();
+  externa?.addEventListener('abort', cortar, { once: true });
   const reloj = setTimeout(() => ctrl.abort(), ms);
   try {
     return await fetch(url, { ...opciones, signal: ctrl.signal });
   } catch (err) {
+    if (externa?.aborted) throw new Cancelado('Subida cancelada');
     if (ctrl.signal.aborted) throw new Error('Se agotó el tiempo de espera. ¿Hay cobertura?');
     throw err;
   } finally {
     clearTimeout(reloj);
+    externa?.removeEventListener('abort', cortar);
   }
 }
 
@@ -152,6 +167,9 @@ export class ColaSubida {
   private inicioRonda = 0;
   /** Lo que esta página está subiendo AHORA: nunca debe reclamarse como huérfano. */
   private trabajando = new Set<string>();
+  /** Para cortar en seco lo que ya está en vuelo cuando el usuario cancela. */
+  private abortadores = new Map<string, AbortController>();
+  private cancelando = false;
   private oyentes: ((r: ResumenCola) => void)[] = [];
 
   constructor(apiBase: string) {
@@ -159,9 +177,13 @@ export class ColaSubida {
 
     // Reanudar en cuanto vuelva la conexión o el usuario vuelva a la pestaña:
     // en iOS la pestaña se congela al bloquear el móvil.
-    addEventListener('online', () => void this.procesar());
+    // Al cambiar la conexión hay que refrescar el resumen ADEMÁS de reintentar:
+    // si no, la barra se quedaba diciendo «Reintentando…» mientras el móvil
+    // estaba sin cobertura, sin dar ninguna pista de lo que pasaba.
+    addEventListener('online', () => { void this.avisar(); void this.procesar(); });
+    addEventListener('offline', () => { void this.avisar(); });
     addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') void this.procesar();
+      if (document.visibilityState === 'visible') { void this.avisar(); void this.procesar(); }
     });
 
     // Reduce el riesgo de que el navegador purgue la cola por falta de espacio.
@@ -222,6 +244,8 @@ export class ColaSubida {
       fallidos: items.filter((i) => i.estado === 'fallido').length,
       pendientes: items.filter((i) => i.estado === 'pendiente').length,
       reintentando: items.filter((i) => i.estado === 'pendiente' && i.intentos > 0).length,
+      sinConexion: !navigator.onLine && items.some((i) => i.estado !== 'hecho'),
+      ultimoError: items.find((i) => i.error && i.estado !== 'hecho')?.error,
       items,
     };
     this.oyentes.forEach((fn) => fn(resumen));
@@ -272,6 +296,26 @@ export class ColaSubida {
     void this.procesar();
   }
 
+  /**
+   * Para la subida a petición del usuario: corta lo que está en vuelo y vacía
+   * la cola de todo lo que no haya llegado ya al servidor. Lo ya confirmado no
+   * se toca: esas fotos están en la galería y no se pueden «des-subir» desde aquí.
+   */
+  async cancelarTodo(): Promise<number> {
+    this.cancelando = true;
+    for (const ctrl of this.abortadores.values()) ctrl.abort();
+    this.abortadores.clear();
+
+    const items = await leerTodo();
+    const aQuitar = items.filter((i) => i.estado !== 'hecho');
+    for (const item of aQuitar) await borrar(item.id);
+
+    this.trabajando.clear();
+    this.cancelando = false;
+    await this.avisar();
+    return aQuitar.length;
+  }
+
   async limpiarHechos(): Promise<void> {
     const items = await leerTodo();
     for (const item of items.filter((i) => i.estado === 'hecho')) await borrar(item.id);
@@ -319,16 +363,22 @@ export class ColaSubida {
   private async subirItem(item: ItemCola): Promise<void> {
     await guardar({ ...item, estado: 'subiendo', marcadoEn: Date.now() });
     this.trabajando.add(item.id);
+    const ctrl = new AbortController();
+    this.abortadores.set(item.id, ctrl);
     await this.avisar();
 
     try {
-      if (!item.servidorId) await this.firmar(item);
-      await this.subirBlobs(item);
-      await this.completar(item);
+      if (!item.servidorId) await this.firmar(item, ctrl.signal);
+      await this.subirBlobs(item, ctrl.signal);
+      await this.completar(item, ctrl.signal);
 
       // Soltar los blobs: ya están en R2 y ocupan MB en el móvil del invitado.
       await guardar({ ...item, estado: 'hecho', blobs: {}, subidas: undefined });
     } catch (err) {
+      // Si lo ha parado el usuario, no se reencola ni se marca como fallo:
+      // cancelarTodo() ya se ha llevado el elemento.
+      if (this.cancelando || err instanceof Cancelado) return;
+
       const intentos = item.intentos + 1;
       const mensaje = err instanceof Error ? err.message : String(err);
 
@@ -344,6 +394,7 @@ export class ColaSubida {
       }
     } finally {
       this.trabajando.delete(item.id);
+      this.abortadores.delete(item.id);
     }
   }
 
@@ -354,7 +405,7 @@ export class ColaSubida {
   }
 
   /** Pide al Worker las URLs prefirmadas. Las claves las decide el servidor. */
-  private async firmar(item: ItemCola): Promise<void> {
+  private async firmar(item: ItemCola, senal?: AbortSignal): Promise<void> {
     const archivos = Object.entries(item.blobs).map(([rol, blob]) => ({
       rol,
       contentType: blob.type || (rol === 'video' ? 'video/mp4' : 'image/webp'),
@@ -365,7 +416,7 @@ export class ColaSubida {
       method: 'POST',
       headers: this.cabeceras(item),
       body: JSON.stringify({ tipo: item.tipo, archivos, origen: item.opciones?.origen }),
-    }, PLAZO_API);
+    }, PLAZO_API, senal);
     if (!res.ok) throw new Error(`No se pudo preparar la subida (${res.status})`);
 
     const datos = await res.json();
@@ -378,7 +429,7 @@ export class ColaSubida {
     await guardar(item);
   }
 
-  private async subirBlobs(item: ItemCola): Promise<void> {
+  private async subirBlobs(item: ItemCola, senal?: AbortSignal): Promise<void> {
     const subidas = item.subidas;
     if (!subidas?.length) throw new Error('Falta la firma de subida');
 
@@ -387,13 +438,13 @@ export class ColaSubida {
       if (!blob) continue;
 
       if (s.rol === 'video') {
-        await this.subirVideoPorPartes(item, s, blob);
+        await this.subirVideoPorPartes(item, s, blob, senal);
       } else {
         const res = await fetchConPlazo(s.url!, {
           method: 'PUT',
           body: blob,
           headers: { 'Content-Type': blob.type || 'image/webp' },
-        }, PLAZO_FOTO);
+        }, PLAZO_FOTO, senal);
         if (!res.ok) throw new Error(`Fallo al subir ${s.rol} (${res.status})`);
       }
     }
@@ -403,7 +454,9 @@ export class ColaSubida {
    * Sube el vídeo en trozos de 5 MB, anotando cada parte terminada en
    * IndexedDB. Si se corta la conexión, al reanudar solo suben las que faltan.
    */
-  private async subirVideoPorPartes(item: ItemCola, s: SubidaFirmada, blob: Blob): Promise<void> {
+  private async subirVideoPorPartes(
+    item: ItemCola, s: SubidaFirmada, blob: Blob, senal?: AbortSignal,
+  ): Promise<void> {
     const urls = s.urls ?? [];
     const partSize = s.partSize ?? 0;
     if (!urls.length || !partSize) throw new Error('Firma de vídeo incompleta');
@@ -416,7 +469,7 @@ export class ColaSubida {
       const desde = (n - 1) * partSize;
       const trozo = blob.slice(desde, Math.min(desde + partSize, blob.size));
 
-      const res = await fetchConPlazo(urls[n - 1]!, { method: 'PUT', body: trozo }, PLAZO_PARTE);
+      const res = await fetchConPlazo(urls[n - 1]!, { method: 'PUT', body: trozo }, PLAZO_PARTE, senal);
       if (!res.ok) throw new Error(`Fallo al subir la parte ${n} del vídeo (${res.status})`);
 
       // R2 debe exponer ETag por CORS o esto viene vacío y no se puede cerrar
@@ -430,7 +483,7 @@ export class ColaSubida {
     }
   }
 
-  private async completar(item: ItemCola): Promise<void> {
+  private async completar(item: ItemCola, senal?: AbortSignal): Promise<void> {
     const cuerpo: Record<string, unknown> = {
       id: item.servidorId,
       tipo: item.tipo,
@@ -455,7 +508,7 @@ export class ColaSubida {
       method: 'POST',
       headers: this.cabeceras(item),
       body: JSON.stringify(cuerpo),
-    }, PLAZO_API);
+    }, PLAZO_API, senal);
     if (!res.ok) throw new Error(`El servidor rechazó la subida (${res.status})`);
   }
 }

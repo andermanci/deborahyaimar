@@ -225,6 +225,70 @@ console.log('\nE) Vuelves a subir tras una sesión anterior');
   await ctx.close();
 }
 
+// ══ F. Parar la subida ═══════════════════════════════════════════════
+console.log('\nF) El usuario para la subida');
+{
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await nuevaPagina(ctx);
+  let cortada = false;
+
+  await page.route('**/firmar', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: 'c', subidas: [
+      { rol: 'thumb', key: 'invitados/c/thumb.webp', url: `${BASE}/__put/t` },
+      { rol: 'web',   key: 'invitados/c/web.webp',   url: `${BASE}/__put/w` }]}) }));
+  // El PUT no responde nunca: simula una subida lenta que el usuario decide cortar.
+  await page.route('**/__put/**', () => { cortada = true; });
+  await page.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+
+  await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await page.setInputFiles('#selector', { name: 'x.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await rellenarNombre(page, 'Ander');
+  await page.waitForSelector('#progresoParar:not([hidden])', { timeout: 20000 })
+    .then(() => ok('aparece el botón de parar')).catch(() => mal('no aparece el botón'));
+
+  await page.click('#progresoParar');
+  await page.waitForTimeout(1200);
+  (await page.locator('#progreso').isHidden()) ? ok('al parar, desaparece la barra') : mal('la barra sigue');
+  (await page.locator('#aviso').textContent())?.includes('cancelada') ? ok('avisa de que se ha cancelado') : mal('no avisa');
+  // Con la galería vacía manda el botón grande del centro, no el flotante.
+  const hayBoton = (await page.locator('#fab').isVisible()) || (await page.locator('#vacioBoton').isVisible());
+  hayBoton ? ok('vuelve a haber forma de añadir fotos') : mal('no hay ningún botón para subir');
+
+  // Y lo importante: la cola queda vacía, no resucita al recargar.
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(2500);
+  const tras = (await page.locator('#progresoTexto').textContent() ?? '').trim();
+  tras === '' ? ok('tras recargar no resucita la subida cancelada') : mal(`resucitó: "${tras}"`);
+  await ctx.close();
+}
+
+// ══ G. Sin cobertura: la interfaz debe DECIRLO ═══════════════════════
+console.log('\nG) Sin cobertura, el estado tiene que ser honesto');
+{
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await nuevaPagina(ctx);
+  await page.route('**/firmar', (r) => r.abort('internetdisconnected'));
+
+  await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await page.setInputFiles('#selector', { name: 'x.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await rellenarNombre(page, 'Ander');
+  await page.waitForTimeout(1500);
+
+  // El navegador se declara sin conexión, como hace un móvil con mala cobertura.
+  await page.context().setOffline(true);
+  await page.evaluate(() => dispatchEvent(new Event('offline')));
+  await page.clock.runFor(25_000);
+  await page.waitForTimeout(500);
+
+  const txt = await page.locator('#progresoTexto').textContent();
+  txt?.includes('Sin conexión') ? ok(`dice que no hay conexión: "${txt}"`) : mal(`sigue diciendo: "${txt}"`);
+  const mot = await page.locator('#progresoMotivo').textContent();
+  mot?.includes('cobertura') ? ok('y explica que se reanudará sola') : mal(`motivo: "${mot}"`);
+  (await page.locator('#progresoParar').isVisible()) ? ok('y deja pararla') : mal('no deja pararla');
+  await page.context().setOffline(false);
+  await ctx.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(52)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Resiliencia correcta');

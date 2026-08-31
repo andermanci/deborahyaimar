@@ -207,7 +207,10 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       flex: none; font-family: inherit; font-size: 0.62rem; letter-spacing: 0.12em;
       text-transform: uppercase; background: none; border: none; cursor: pointer;
       color: var(--pink-deep); text-decoration: underline; text-underline-offset: 3px;
+      padding: 0.2rem 0;
     }
+    .progreso-accion[hidden] { display: none !important; }
+    #progresoParar { color: var(--gray); }
 
     /* ── HOJA INFERIOR: pide el nombre una sola vez ────────────────── */
     .velo {
@@ -380,7 +383,10 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     <div class="progreso" id="progreso" hidden>
       <div class="progreso-fila">
         <span class="progreso-texto" id="progresoTexto"></span>
-        <button class="progreso-accion" id="progresoAccion" hidden></button>
+        <span style="display:flex;gap:.7rem;flex:none">
+          <button class="progreso-accion" id="progresoAccion" hidden></button>
+          <button class="progreso-accion" id="progresoParar" hidden>Parar</button>
+        </span>
       </div>
       <div class="progreso-barra"><span id="progresoBarra"></span></div>
       <p class="progreso-motivo" id="progresoMotivo" hidden></p>
@@ -865,22 +871,34 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         return;
       }
 
-      // «Subiendo N de N» se leía como «terminado pero atascado». Se dice
-      // cuántas van LISTAS, que no es ambiguo.
-      const partes: string[] = [];
-      if (r.subiendo || r.pendientes) partes.push(`Subiendo… ${r.hechos} de ${r.total} listas`);
-      if (r.reintentando) partes.push('reintentando');
-      if (r.fallidos) partes.push(r.fallidos === 1 ? '1 foto fallida' : `${r.fallidos} fotos fallidas`);
-      texto.textContent = partes.join(' · ') || `${r.hechos} de ${r.total} listas`;
+      // El estado tiene que ser honesto: antes, una cola parada esperando
+      // cobertura seguía diciendo «Subiendo…» sin dar ninguna pista.
+      const cuantas = `${r.hechos} de ${r.total} listas`;
+      if (r.sinConexion) {
+        texto.textContent = `Sin conexión · ${cuantas}`;
+      } else if (r.reintentando) {
+        texto.textContent = `Reintentando… · ${cuantas}`;
+      } else if (r.subiendo) {
+        texto.textContent = `Subiendo… ${cuantas}`;
+      } else if (r.pendientes) {
+        texto.textContent = `En cola · ${cuantas}`;
+      } else {
+        texto.textContent = cuantas;
+      }
+      if (r.fallidos) {
+        texto.textContent += r.fallidos === 1 ? ' · 1 fallida' : ` · ${r.fallidos} fallidas`;
+      }
 
-      // Decir POR QUÉ falló: no es lo mismo quedarse sin cobertura que subir
-      // un archivo que el servidor rechaza.
-      const primerError = r.items.find((i) => i.estado === 'fallido' && i.error)?.error;
-      if (primerError) {
+      // Decir POR QUÉ, aunque todavía esté reintentando: no es lo mismo
+      // quedarse sin cobertura que subir algo que el servidor rechaza.
+      const razon = r.sinConexion
+        ? 'Esperando cobertura. Se reanuda sola en cuanto vuelva; puedes cerrar la página.'
+        : r.ultimoError;
+      if (razon) {
         motivo.hidden = false;
-        motivo.textContent = /fetch|network|Failed|NetworkError/i.test(primerError)
+        motivo.textContent = /fetch|network|Failed|NetworkError|tiempo de espera/i.test(razon)
           ? 'Parece que no hay conexión. Se reintentará solo al volver la cobertura.'
-          : primerError;
+          : razon;
       } else {
         motivo.hidden = true;
       }
@@ -891,9 +909,19 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       } else {
         accion.hidden = true;
       }
+      // Mientras quede algo sin llegar al servidor, se puede parar.
+      ($('progresoParar') as HTMLElement).hidden = r.hechos === r.total;
     });
 
     $('progresoAccion').addEventListener('click', () => cola.reintentarFallidos());
+
+    $('progresoParar').addEventListener('click', async () => {
+      const n = await cola.cancelarTodo();
+      subiendo = false;
+      sincronizarFab();
+      progreso.hidden = true;
+      avisar(n === 1 ? 'Subida cancelada' : `${n} subidas canceladas`);
+    });
   }
 </script>
 
