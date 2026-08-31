@@ -192,6 +192,54 @@ await page.waitForTimeout(1200);
 (await page.locator('.tarjeta').count()) === 1 ? ok('la foto SIGUE ahí (no miente)') : mal('la quitó sin permiso del servidor');
 (await page.locator('#aviso').textContent())?.includes('No se pudo') ? ok('avisa de que no se pudo') : mal('no avisó del fallo');
 
+// ── 9. La foto aparece sola, sin recargar ────────────────────────────
+console.log('\n9) Tras subir, la foto aparece sin recargar');
+{
+  const p2 = await ctx.newPage();
+  p2.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+
+  const urlsIndice = [];
+  let hayFoto = false;
+  await p2.route('**/indice.json*', (r) => {
+    const u = r.request().url();
+    if (!u.includes('oficial')) urlsIndice.push(u);
+    return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+      items: (hayFoto && !u.includes('oficial')) ? [{
+        id: 'recien', tipo: 'foto', categoria: null, nombre: 'Ander', deviceHash: 'x',
+        thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, poster: null,
+        duracion: null, ancho: 1200, alto: 800, ts: 5,
+      }] : [] }) });
+  });
+  await p2.route('**/firmar', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: 'n', subidas: [
+      { rol: 'thumb', key: 'invitados/n/thumb.webp', url: `${BASE}/__put/t` },
+      { rol: 'web',   key: 'invitados/n/web.webp',   url: `${BASE}/__put/w` }]}) }));
+  await p2.route('**/__put/**', (r) => r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' }));
+  await p2.route('**/completar', (r) => { hayFoto = true; return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+
+  await p2.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  (await p2.locator('.tarjeta').count()) === 0 ? ok('empieza vacía') : mal('no empieza vacía');
+
+  const cargasIniciales = urlsIndice.length;
+  await p2.setInputFiles('#selector', { name: 'n.jpg', mimeType: 'image/jpeg', buffer: readFileSync('public/foto2.jpg') });
+  await rellenarNombre(p2, 'Ander');
+
+  // Sin recargar en ningún momento: la tarjeta debe aparecer sola.
+  await p2.waitForSelector('.tarjeta', { timeout: 30000 })
+    .then(() => ok('la foto aparece sin recargar la página'))
+    .catch(() => mal('la foto no apareció'));
+
+  // La petición de después de subir SÍ salta la caché; las del sondeo NO.
+  const nuevas = urlsIndice.slice(cargasIniciales);
+  nuevas.some((u) => /[?&]t=\d+/.test(u))
+    ? ok('la petición posterior a la subida salta la caché del borde')
+    : mal('no forzó datos frescos');
+  urlsIndice.slice(0, cargasIniciales).every((u) => !/[?&]t=\d+/.test(u))
+    ? ok('el sondeo periódico NO la salta (sigue protegiendo el día de la boda)')
+    : mal('¡el sondeo lleva cache-buster!');
+  await p2.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(50)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Todo correcto');

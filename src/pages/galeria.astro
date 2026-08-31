@@ -746,9 +746,17 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     // sigue sirviendo su copia de 15 s. Lo que se evita es la caché privada del
     // navegador. Y la URL sigue sin cache-buster: un ?t=Date.now() sí saltaría
     // la caché del borde y recrearía el fallo original.
-    async function traer(origen: 'invitado' | 'oficial'): Promise<Item[] | null> {
+    async function traer(origen: 'invitado' | 'oficial', forzar = false): Promise<Item[] | null> {
       try {
-        const url = origen === 'oficial' ? `${API}/indice.json?origen=oficial` : `${API}/indice.json`;
+        let url = origen === 'oficial' ? `${API}/indice.json?origen=oficial` : `${API}/indice.json`;
+        // `forzar` salta la caché del borde con un parámetro único.
+        //
+        // OJO: esto SOLO se usa una vez, justo después de subir. En el sondeo
+        // periódico sería exactamente el bug que tumbaba la galería con 150
+        // invitados. Aquí es una petición por subida, no una cada 15 s por
+        // persona, y es lo que hace que tus fotos aparezcan al instante en vez
+        // de esperar a que caduque la copia del CDN.
+        if (forzar) url += `${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
         const res = await fetch(url, { cache: 'no-store' });
         if (!res.ok) return null;
         const datos = await res.json();
@@ -757,8 +765,8 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     }
 
     let primeraCarga = true;
-    async function refrescar() {
-      const [inv, ofi] = await Promise.all([traer('invitado'), traer('oficial')]);
+    async function refrescar(forzar = false) {
+      const [inv, ofi] = await Promise.all([traer('invitado', forzar), traer('oficial', forzar)]);
       const antes = invitados.length;
       // Ante un fallo de red, conservar lo que ya había: nunca vaciar la galería.
       if (inv) invitados = inv;
@@ -866,7 +874,13 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         texto.textContent = r.hechos === 1 ? '¡Gracias! Ya está en la galería' : `¡Gracias! ${r.hechos} archivos en la galería`;
         accion.hidden = true;
         motivo.hidden = true;
-        refrescar();
+        ($('progresoParar') as HTMLElement).hidden = true;
+
+        // Traer saltando la caché para que las recién subidas aparezcan ya, y
+        // subir a verlas: es la confirmación de verdad de que han llegado.
+        void refrescar(true).then(() => {
+          if (cat === 'invitados') scrollTo({ top: 0, behavior: 'smooth' });
+        });
         setTimeout(() => { cola.limpiarHechos(); }, 3500);
         return;
       }
