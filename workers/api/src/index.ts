@@ -259,9 +259,14 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
   }));
 
   const res = json({ items, total: items.length }, env, 200, {
-    // 15 s de frescura en el borde + 60 s sirviendo lo viejo mientras revalida:
-    // el muro nunca se queda en blanco aunque D1 tarde.
-    'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=60',
+    // 15 s de frescura + 15 s sirviendo lo viejo mientras revalida.
+    //
+    // El SWR estaba en 60 s y era demasiado: el borde guarda varias copias con
+    // edades distintas, así que una foto recién subida podía tardar hasta 75 s
+    // en verse, y aparecer y desaparecer entre peticiones. En un muro que la
+    // gente mira en directo, eso se nota. Con 15+15 el peor caso son 30 s y
+    // seguimos cubiertos si D1 tarda en responder.
+    'Cache-Control': 'public, s-maxage=15, stale-while-revalidate=15',
   });
   ctx.waitUntil(cache.put(req, res.clone()));
   return res;

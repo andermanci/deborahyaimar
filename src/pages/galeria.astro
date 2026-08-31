@@ -467,15 +467,18 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     localStorage.setItem('ad-device', deviceId);
     let miNombre = localStorage.getItem('ad-nombre') ?? '';
 
-    let hayFotos = false;
+    // Arranca visible a propósito: el botón de subir es la acción principal y
+    // no puede depender de que llegue el índice. Con mala cobertura, un
+    // invitado se quedaría mirando una página sin forma de añadir nada.
+    let mostrandoVacio = false;
     let subiendo = false;
 
-    /** El flotante solo aparece si no manda el botón grande del estado vacío
-        y no está ocupada la barra de progreso: nunca dos botones iguales. */
+    /** Se aparta solo cuando manda el botón grande del estado vacío o cuando
+        la barra de progreso ocupa su sitio: nunca dos botones iguales. */
     function sincronizarFab() {
       const fabEl = document.getElementById('fab') as HTMLElement | null;
       if (!fabEl) return;
-      fabEl.hidden = subiendo || !hayFotos;
+      fabEl.hidden = subiendo || mostrandoVacio;
     }
 
     const visibles = (): Item[] =>
@@ -579,7 +582,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       const sinFotos = items.length === 0;
       vacio.classList.toggle('visible', sinFotos);
       rejilla.style.display = sinFotos ? 'none' : 'flex';
-      hayFotos = !sinFotos;
+      mostrandoVacio = sinFotos && cat === 'invitados';
       sincronizarFab();
 
       if (cat === 'invitados') {

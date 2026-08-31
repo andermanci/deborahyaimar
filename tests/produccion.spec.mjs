@@ -28,7 +28,9 @@ await page.goto(`${SITIO}/fotos`, { waitUntil: 'networkidle' });
 page.url().includes('/galeria') ? ok('el QR lleva a la galería') : mal(`fue a ${page.url()}`);
 await page.locator('#postBoda').isVisible() ? ok('LA GALERÍA ESTÁ ABIERTA') : mal('sigue cerrada');
 await page.locator('#preBoda').isHidden() ? ok('sin cuenta atrás') : mal('sigue la cuenta atrás');
-await page.locator('#navSubir').isVisible() ? ok('el botón Subir se ve (y ahora sí lleva a algún sitio)') : mal('el botón Subir sigue oculto');
+// Lo que importa no es CUÁL de los dos botones, sino que siempre haya uno.
+const hayBoton = (await page.locator('#fab').isVisible()) || (await page.locator('#vacioBoton').isVisible());
+hayBoton ? ok('siempre hay una forma visible de añadir fotos') : mal('no hay ningún botón para subir');
 const tab = await page.locator('.pestana.activa').getAttribute('data-cat');
 tab === 'invitados' ? ok('abre en Invitados') : mal(`abre en ${tab}`);
 
@@ -37,7 +39,7 @@ await page.fill('#nombreInput', 'Ensayo Claude');
 await page.setInputFiles('#selector', {
   name: 'boda.jpg', mimeType: 'image/jpeg', buffer: readFileSync('public/foto2.jpg'),
 });
-await rellenarNombre(page, 'Ander');
+await rellenarNombre(page, 'Ensayo Claude');
 await page.waitForFunction(
   () => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'),
   { timeout: 90000 }
@@ -45,10 +47,33 @@ await page.waitForFunction(
  .catch(async () => mal(`no completó: "${await page.locator('#progresoTexto').textContent()}"`));
 
 console.log('\n3) ¿Aparece en la galería?');
-await page.waitForTimeout(18000);
+// El índice se cachea 15 s en el borde. Esperamos a que la API la tenga y
+// solo entonces recargamos: así el test mide el render, no la caché.
+let enApi = false;
+for (let i = 0; i < 30 && !enApi; i++) {
+  const r = await fetch('https://api.deborahyaimar.org/indice.json');
+  const d = await r.json();
+  enApi = (d.items ?? []).some((x) => x.nombre === 'Ensayo Claude');
+  if (!enApi) await new Promise((res) => setTimeout(res, 3000));
+}
+enApi ? ok('la API ya la sirve') : mal('la API no la sirve tras 90 s');
 await page.reload({ waitUntil: 'networkidle' });
-await page.waitForSelector('.tarjeta', { timeout: 25000 })
-  .then(() => ok('la foto aparece en la rejilla')).catch(() => mal('no aparece'));
+await page.waitForSelector('.tarjeta', { timeout: 60000 })
+  .then(() => ok('la foto aparece en la rejilla'))
+  .catch(async () => {
+    mal('no aparece');
+    await page.screenshot({ path: '/tmp/fallo.png', fullPage: false });
+    const diag = await page.evaluate(() => ({
+      url: location.href,
+      postBodaOculto: document.getElementById('postBoda')?.hidden,
+      preBodaOculto: document.getElementById('preBoda')?.hidden,
+      tarjetas: document.querySelectorAll('.tarjeta').length,
+      columnas: document.querySelectorAll('.columna').length,
+      vacio: document.getElementById('vacio')?.classList.contains('visible'),
+      progreso: document.getElementById('progresoTexto')?.textContent,
+    }));
+    console.log('    diagnóstico:', JSON.stringify(diag));
+  });
 const nombre = await page.locator('.tarjeta-quien').first().textContent().catch(() => '');
 nombre === 'Ensayo Claude' ? ok('con el nombre de quien la subió') : mal(`nombre: "${nombre}"`);
 const src = await page.locator('.tarjeta img').first().getAttribute('src').catch(() => '');
