@@ -6,9 +6,10 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 <head>
   <meta charset="utf-8" />
   <link rel="icon" href="/logo-positivo.png" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="description" content="Galería — Aimar & Deborah · 12 · 09 · 2026" />
   <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#FAF8F4" />
   <title>Fotos · Aimar & Deborah</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,379 +17,418 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
   <link href="https://fonts.googleapis.com/css2?family=Raleway:ital,wght@0,200;0,300;0,400;0,500;1,200;1,300&display=swap" rel="stylesheet" />
   <style is:global>@import '../styles/theme.css';</style>
   <style is:global>
-    /* NAV */
-    nav {
+    /* Escala de espaciado, para que todo respire igual */
+    :root {
+      --s1: 0.25rem; --s2: 0.5rem;  --s3: 0.75rem; --s4: 1rem;
+      --s5: 1.5rem;  --s6: 2rem;    --s7: 3rem;    --s8: 4rem;
+      --nav-h: 52px;
+      --fab-h: calc(52px + env(safe-area-inset-bottom, 0px));
+    }
+    body { overscroll-behavior-y: none; }
+
+    /* ── BARRA SUPERIOR ────────────────────────────────────────────
+       Compacta: el título vive aquí, no en un bloque que come pantalla. */
+    .barra {
       position: sticky; top: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 0 1.5rem; height: 56px;
-      background: rgba(250,248,244,0.92); backdrop-filter: blur(10px);
+      display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+      padding: 0 var(--s4); height: var(--nav-h);
+      background: rgba(250,248,244,0.88);
+      backdrop-filter: saturate(180%) blur(14px);
+      -webkit-backdrop-filter: saturate(180%) blur(14px);
       border-bottom: 1px solid var(--border);
     }
-    .nav-logo { height: 26px; }
-    .nav-back {
-      font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase;
-      color: var(--gray); text-decoration: none; transition: color 0.2s;
+    .barra-atras {
+      justify-self: start; display: flex; align-items: center; gap: 0.3rem;
+      font-size: 0.68rem; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--gray); text-decoration: none;
+      padding: var(--s2) var(--s2) var(--s2) 0; margin-left: -2px;
     }
-    .nav-back:hover { color: var(--dark); }
-    .nav-upload-btn {
-      font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
-      color: var(--dark); background: none;
-      border: 1px solid var(--border); border-radius: 2px;
-      padding: 0.45rem 1rem; cursor: pointer;
-      font-family: inherit; transition: border-color 0.2s, color 0.2s;
-      text-decoration: none; display: flex; align-items: center; gap: 0.4rem;
+    .barra-atras svg { width: 15px; height: 15px; }
+    .barra-titulo {
+      font-family: 'Sloop', cursive; font-size: 1.9rem; line-height: 1;
+      color: var(--dark); padding-bottom: 2px;
     }
-    .nav-upload-btn:hover { border-color: var(--pink); color: var(--pink); }
-    .nav-upload-btn svg { width: 13px; height: 13px; }
+    .barra-vivo {
+      justify-self: end; display: flex; align-items: center; gap: 0.4rem;
+      font-size: 0.58rem; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--gray); opacity: 0; transition: opacity 0.4s;
+    }
+    .barra-vivo.visible { opacity: 1; }
+    .punto {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--pink);
+      animation: latido 2.4s ease-in-out infinite;
+    }
+    @keyframes latido {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.35; transform: scale(0.8); }
+    }
 
-    /* HEADER */
-    .gl-header { text-align: center; padding: 4rem 1.5rem 2.5rem; }
-    .gl-eyebrow {
-      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--pink); margin-bottom: 1rem;
+    /* ── PESTAÑAS (solo si hay más de una) ─────────────────────────── */
+    .pestanas {
+      display: none; gap: var(--s1); overflow-x: auto; scrollbar-width: none;
+      padding: var(--s3) var(--s4); position: sticky; top: var(--nav-h); z-index: 90;
+      background: rgba(250,248,244,0.92);
+      backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
     }
-    .gl-title {
-      font-family: 'Sloop', cursive; font-size: clamp(2.8rem, 7vw, 4.5rem);
-      font-weight: normal; color: var(--dark); line-height: 1.1; margin-bottom: 0.8rem;
+    .pestanas.visible { display: flex; }
+    .pestanas::-webkit-scrollbar { display: none; }
+    .pestana {
+      flex: none; font-family: inherit; cursor: pointer;
+      font-size: 0.66rem; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--gray); background: none; border: 1px solid transparent;
+      border-radius: 100px; padding: 0.45rem 0.9rem; white-space: nowrap;
+      transition: color 0.2s, background 0.2s, border-color 0.2s;
     }
-    .gl-sub { font-size: 0.82rem; color: var(--gray); letter-spacing: 0.1em; }
+    .pestana.activa { color: var(--dark); background: #fff; border-color: var(--border); }
+    .pestana[hidden] { display: none; }
 
-    /* TABS */
-    .gl-tabs {
-      display: flex; justify-content: flex-start; overflow-x: auto;
-      border-bottom: 1px solid var(--border); padding: 0 1rem;
-      position: sticky; top: 56px; z-index: 90;
-      background: rgba(250,248,244,0.95); backdrop-filter: blur(10px);
-      scrollbar-width: none;
+    /* ── REJILLA ───────────────────────────────────────────────────
+       Columnas reales en DOM (no columnas CSS): así la foto más nueva
+       queda siempre arriba a la izquierda y el orden se lee bien. */
+    .rejilla-envoltorio { padding: var(--s2) var(--s2) calc(var(--fab-h) + var(--s8)); }
+    @media (min-width: 720px) {
+      .rejilla-envoltorio { padding: var(--s4) var(--s4) calc(var(--fab-h) + var(--s8)); max-width: 1500px; margin: 0 auto; }
     }
-    .gl-tabs::-webkit-scrollbar { display: none; }
-    @media (min-width: 720px) { .gl-tabs { justify-content: center; } }
-    .gl-tab {
-      font-size: 0.63rem; letter-spacing: 0.16em; text-transform: uppercase;
-      color: var(--gray); padding: 0.9rem 1.1rem; white-space: nowrap;
-      cursor: pointer; border: none; background: none;
-      border-bottom: 2px solid transparent; margin-bottom: -1px;
-      transition: color 0.2s, border-color 0.2s; font-family: inherit;
-    }
-    .gl-tab:hover { color: var(--dark); }
-    .gl-tab.active { color: var(--dark); border-bottom-color: var(--pink); }
-    .gl-tab[hidden] { display: none; }
+    .rejilla { display: flex; gap: var(--s2); align-items: flex-start; }
+    .columna { flex: 1 1 0; display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
 
-    /* GRID */
-    .gl-grid-wrap { padding: 2.5rem 1rem 5rem; max-width: 1200px; margin: 0 auto; }
-    .gl-grid { column-count: 2; column-gap: 4px; }
-    @media (min-width: 480px)  { .gl-grid { column-count: 3; } }
-    @media (min-width: 720px)  { .gl-grid { column-count: 4; } }
-    @media (min-width: 1000px) { .gl-grid { column-count: 5; } }
-
-    .gl-item {
-      -webkit-column-break-inside: avoid; break-inside: avoid;
-      margin-bottom: 4px; position: relative; cursor: pointer;
-      overflow: hidden; background: var(--rose);
-      animation: fadeIn 0.35s ease both;
+    .tarjeta {
+      position: relative; display: block; width: 100%; padding: 0; border: 0;
+      background: var(--blush); border-radius: 10px; overflow: hidden;
+      cursor: pointer; font-family: inherit; line-height: 0;
+      animation: entrar 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      -webkit-tap-highlight-color: transparent;
     }
-    .gl-item img { width: 100%; display: block; transition: transform 0.4s; }
-    .gl-item:hover img { transform: scale(1.04); }
-    .gl-item-name {
-      position: absolute; bottom: 0; left: 0; right: 0; padding: 0.35rem 0.6rem;
-      background: linear-gradient(transparent, rgba(10,3,3,0.55));
-      font-size: 0.58rem; letter-spacing: 0.1em; color: rgba(255,255,255,0.85);
-      opacity: 0; transition: opacity 0.25s;
+    .tarjeta img {
+      width: 100%; height: 100%; display: block;
+      object-fit: cover;          /* sin esto quedan huecos de fondo */
+      transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    @media (hover: hover) {
+      .tarjeta:hover img { transform: scale(1.05); }
+      .tarjeta:hover .tarjeta-quien { opacity: 1; transform: none; }
+    }
+    .tarjeta:active { transform: scale(0.985); transition: transform 0.15s; }
+    .tarjeta:focus-visible { outline: 2px solid var(--pink); outline-offset: 2px; }
+
+    .tarjeta-quien {
+      position: absolute; left: 0; right: 0; bottom: 0;
+      padding: 1.6rem 0.6rem 0.5rem;
+      background: linear-gradient(transparent, rgba(20,8,12,0.6));
+      font-size: 0.62rem; line-height: 1.3; letter-spacing: 0.06em;
+      color: #fff; text-align: left;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.4);
     }
-    .gl-item:hover .gl-item-name { opacity: 1; }
-    @media (hover: none) { .gl-item-name { opacity: 1; } }
+    @media (hover: hover) {
+      .tarjeta-quien { opacity: 0; transform: translateY(4px); transition: opacity 0.25s, transform 0.25s; }
+    }
+    .tarjeta-mia { box-shadow: inset 0 0 0 2px var(--pink); }
 
-    .gl-play {
-      position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    .insignia {
+      position: absolute; top: 7px; right: 7px;
+      display: flex; align-items: center; gap: 0.25rem;
+      background: rgba(15,8,10,0.55); backdrop-filter: blur(6px);
+      color: #fff; font-size: 0.58rem; letter-spacing: 0.04em;
+      padding: 0.2rem 0.45rem; border-radius: 100px; line-height: 1;
+    }
+    .insignia svg { width: 9px; height: 9px; }
+
+    /* ── ESTADO VACÍO: es el propio botón, no un cartel ───────────── */
+    .vacio {
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: var(--s6) var(--s5) var(--s8);
+      min-height: calc(100dvh - var(--nav-h) - var(--fab-h));
+    }
+    .vacio.visible { display: flex; }
+    .vacio-icono {
+      width: 64px; height: 64px; border-radius: 50%;
+      background: var(--blush); color: var(--pink-deep);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: var(--s5);
+    }
+    .vacio-icono svg { width: 26px; height: 26px; }
+    .vacio-titulo {
+      font-family: 'Sloop', cursive; font-size: 2.4rem; line-height: 1.1;
+      color: var(--dark); margin-bottom: var(--s3);
+    }
+    .vacio-texto {
+      font-size: 0.9rem; color: var(--gray); line-height: 1.7;
+      max-width: 30ch; margin-bottom: var(--s6);
+    }
+    .vacio-boton {
+      font-family: inherit; font-size: 0.72rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: #fff; background: var(--dark);
+      border: none; border-radius: 100px; padding: 0.95rem 2.2rem; cursor: pointer;
+      transition: transform 0.2s, opacity 0.2s;
+    }
+    .vacio-boton:active { transform: scale(0.97); }
+
+    /* ── BOTÓN FLOTANTE: la acción principal, siempre a mano ───────── */
+    .fab-zona {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 120;
+      display: flex; justify-content: center;
+      padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom, 0px));
+      background: linear-gradient(transparent, rgba(250,248,244,0.85) 35%, var(--cream));
       pointer-events: none;
     }
-    .gl-play span {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
-      display: flex; align-items: center; justify-content: center;
-      color: #fff; font-size: 0.7rem; padding-left: 3px;
+    .fab {
+      pointer-events: auto;
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      font-family: inherit; font-size: 0.74rem; letter-spacing: 0.16em;
+      text-transform: uppercase; color: #fff; background: var(--dark);
+      border: none; border-radius: 100px; padding: 1rem 1.9rem; cursor: pointer;
+      box-shadow: 0 6px 24px rgba(40,20,28,0.22), 0 2px 6px rgba(40,20,28,0.12);
+      transition: transform 0.2s cubic-bezier(0.2,0.8,0.2,1), box-shadow 0.2s;
+      -webkit-tap-highlight-color: transparent;
     }
-    .gl-dur {
-      position: absolute; top: 6px; right: 6px;
-      background: rgba(0,0,0,0.55); color: #fff;
-      font-size: 0.55rem; letter-spacing: 0.06em;
-      padding: 1px 5px; border-radius: 2px;
+    .fab:active { transform: scale(0.96); }
+    .fab svg { width: 17px; height: 17px; }
+    .fab[hidden] { display: none !important; }
+
+    /* Barra de progreso, ocupa el sitio del FAB mientras sube */
+    .progreso {
+      pointer-events: auto; width: 100%; max-width: 460px;
+      background: #fff; border: 1px solid var(--border); border-radius: 16px;
+      padding: var(--s3) var(--s4); box-shadow: 0 6px 24px rgba(40,20,28,0.14);
+    }
+    .progreso[hidden] { display: none !important; }
+    .progreso-fila { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); }
+    .progreso-texto { font-size: 0.76rem; color: var(--dark); letter-spacing: 0.02em; }
+    .progreso-texto.error { color: var(--err); }
+    .progreso-barra { height: 3px; background: var(--border); border-radius: 100px; overflow: hidden; margin-top: var(--s2); }
+    .progreso-barra span { display: block; height: 100%; width: 0; background: var(--pink-deep); border-radius: 100px; transition: width 0.35s ease; }
+    .progreso-motivo {
+      margin-top: var(--s2); font-size: 0.7rem; line-height: 1.45;
+      color: var(--err); opacity: 0.9;
+    }
+    .progreso-motivo[hidden] { display: none !important; }
+    .progreso-accion {
+      flex: none; font-family: inherit; font-size: 0.62rem; letter-spacing: 0.12em;
+      text-transform: uppercase; background: none; border: none; cursor: pointer;
+      color: var(--pink-deep); text-decoration: underline; text-underline-offset: 3px;
     }
 
-    /* Estado vacío */
-    .gl-empty {
-      display: none; flex-direction: column; align-items: center; justify-content: center;
-      padding: 5rem 2rem; text-align: center;
+    /* ── HOJA INFERIOR: pide el nombre una sola vez ────────────────── */
+    .velo {
+      position: fixed; inset: 0; z-index: 200; background: rgba(26,18,22,0.45);
+      backdrop-filter: blur(3px); opacity: 0; pointer-events: none; transition: opacity 0.3s;
     }
-    .gl-empty.visible { display: flex; }
-    .gl-empty-icon { width: 52px; height: 52px; margin-bottom: 2rem; color: var(--rose); }
-    .gl-empty-title {
-      font-size: 1rem; font-weight: 300; letter-spacing: 0.12em;
-      text-transform: uppercase; color: var(--dark); margin-bottom: 0.8rem;
+    .velo.abierto { opacity: 1; pointer-events: auto; }
+    .hoja {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 210;
+      background: var(--cream); border-radius: 22px 22px 0 0;
+      padding: var(--s5) var(--s5) calc(var(--s6) + env(safe-area-inset-bottom, 0px));
+      transform: translateY(102%); transition: transform 0.36s cubic-bezier(0.2, 0.9, 0.2, 1);
+      box-shadow: 0 -8px 40px rgba(40,20,28,0.18);
     }
-    .gl-empty-sub { font-size: 0.82rem; color: var(--gray); max-width: 340px; line-height: 1.8; }
+    .hoja.abierta { transform: none; }
+    @media (min-width: 640px) {
+      .hoja { left: 50%; right: auto; bottom: 50%; width: min(420px, 92vw);
+              transform: translate(-50%, 60%) scale(0.96); border-radius: 18px; opacity: 0; }
+      .hoja.abierta { transform: translate(-50%, 50%) scale(1); opacity: 1; }
+    }
+    .hoja-tirador { width: 36px; height: 4px; border-radius: 100px; background: var(--rose); margin: 0 auto var(--s5); }
+    @media (min-width: 640px) { .hoja-tirador { display: none; } }
+    .hoja-titulo {
+      font-family: 'Sloop', cursive; font-size: 2.1rem; line-height: 1.1;
+      color: var(--dark); text-align: center; margin-bottom: var(--s2);
+    }
+    .hoja-texto { font-size: 0.84rem; color: var(--gray); text-align: center; margin-bottom: var(--s5); line-height: 1.6; }
+    .hoja-input {
+      width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 12px;
+      color: var(--dark); font-family: inherit; font-size: 1rem; font-weight: 300;
+      padding: 0.9rem 1rem; margin-bottom: var(--s4); text-align: center;
+    }
+    .hoja-input:focus { outline: none; border-color: var(--pink); }
+    .hoja-boton {
+      width: 100%; font-family: inherit; font-size: 0.74rem; letter-spacing: 0.18em;
+      text-transform: uppercase; color: #fff; background: var(--dark);
+      border: none; border-radius: 100px; padding: 1rem; cursor: pointer;
+    }
+    .hoja-boton:disabled { opacity: 0.35; }
 
-    .gl-estado {
-      text-align: center; margin-top: 1.5rem;
-      font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
-      color: var(--gray); opacity: 0.6;
-    }
-    .gl-estado span { color: var(--pink); }
-
-    /* LIGHTBOX */
-    .lightbox {
-      display: none; position: fixed; inset: 0; z-index: 1000;
-      background: rgba(12,4,4,0.96); align-items: center; justify-content: center;
+    /* ── VISOR ─────────────────────────────────────────────────────── */
+    .visor {
+      position: fixed; inset: 0; z-index: 300; display: none;
+      background: rgba(12,6,9,0.97); align-items: center; justify-content: center;
       touch-action: pan-y;
     }
-    .lightbox.open { display: flex; }
-    .lightbox img, .lightbox video { max-width: 92vw; max-height: 88vh; object-fit: contain; }
-    .lb-close, .lb-prev, .lb-next {
-      position: absolute; background: none; border: none; color: #fff; cursor: pointer;
-      transition: opacity 0.2s; opacity: 0.5;
+    .visor.abierto { display: flex; animation: aparecer 0.25s ease both; }
+    @keyframes aparecer { from { opacity: 0 } to { opacity: 1 } }
+    .visor img, .visor video { max-width: 100vw; max-height: 100dvh; object-fit: contain; }
+    .visor-cerrar, .visor-ant, .visor-sig {
+      position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px);
+      border: none; color: #fff; cursor: pointer; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
     }
-    .lb-close { top: 1rem; right: 1.2rem; font-size: 1.5rem; padding: 0.5rem; }
-    .lb-prev, .lb-next { top: 50%; transform: translateY(-50%); font-size: 2.4rem; padding: 1rem 0.8rem; }
-    .lb-prev { left: 0; } .lb-next { right: 0; }
-    .lb-close:hover, .lb-prev:hover, .lb-next:hover { opacity: 1; }
-    .lb-caption {
-      position: absolute; bottom: 1.2rem; left: 0; right: 0; text-align: center;
-      color: rgba(255,255,255,0.65); font-size: 0.68rem; letter-spacing: 0.12em;
+    .visor-cerrar:hover, .visor-ant:hover, .visor-sig:hover { background: rgba(255,255,255,0.22); }
+    .visor-cerrar { top: calc(var(--s4) + env(safe-area-inset-top, 0px)); right: var(--s4); width: 38px; height: 38px; font-size: 1.1rem; }
+    .visor-ant, .visor-sig { top: 50%; transform: translateY(-50%); width: 42px; height: 42px; font-size: 1.5rem; }
+    .visor-ant { left: var(--s3); } .visor-sig { right: var(--s3); }
+    @media (max-width: 640px) { .visor-ant, .visor-sig { display: none; } }
+    .visor-pie {
+      position: absolute; bottom: calc(var(--s5) + env(safe-area-inset-bottom, 0px));
+      left: 0; right: 0; text-align: center;
+      color: rgba(255,255,255,0.8); font-size: 0.74rem; letter-spacing: 0.1em;
+      display: flex; flex-direction: column; gap: var(--s2); align-items: center;
+    }
+    .visor-borrar {
+      font-family: inherit; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
+      background: none; border: none; color: rgba(255,255,255,0.55); cursor: pointer;
+      text-decoration: underline; text-underline-offset: 3px;
+    }
+    .visor-borrar[hidden] { display: none !important; }
+
+    /* ── AVISO FLOTANTE ────────────────────────────────────────────── */
+    .aviso {
+      position: fixed; left: 50%; transform: translate(-50%, -20px); z-index: 250;
+      top: calc(var(--nav-h) + var(--s3));
+      background: var(--dark); color: #fff; border-radius: 100px;
+      padding: 0.65rem 1.3rem; font-size: 0.76rem; letter-spacing: 0.04em;
+      box-shadow: 0 6px 24px rgba(40,20,28,0.25);
+      opacity: 0; pointer-events: none; transition: opacity 0.3s, transform 0.3s;
+      max-width: 90vw; text-align: center;
+    }
+    .aviso.visible { opacity: 1; transform: translate(-50%, 0); }
+
+    @keyframes entrar {
+      from { opacity: 0; transform: translateY(10px) scale(0.98); }
+      to { opacity: 1; transform: none; }
     }
 
-    /* UPLOAD */
-    .upload-section { background: var(--blush); border-top: 1px solid var(--border); padding: 4rem 1.5rem; }
-    .upload-inner { max-width: 480px; margin: 0 auto; }
-    .upload-header { text-align: center; margin-bottom: 2rem; }
-    .upload-eyebrow {
-      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--pink); margin-bottom: 0.8rem;
-    }
-    .upload-title {
-      font-size: clamp(1.3rem, 3vw, 1.7rem); font-weight: 200;
-      letter-spacing: 0.18em; text-transform: uppercase; color: var(--dark);
-    }
-    .uf-label {
-      font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
-      color: var(--gray); display: block; margin-bottom: 0.4rem;
-    }
-    .uf-input {
-      width: 100%; background: #fff; border: 1px solid var(--border); border-radius: 2px;
-      color: var(--dark); font-family: inherit; font-size: 1rem; font-weight: 300;
-      padding: 0.75rem 1rem; transition: border-color 0.2s; margin-bottom: 1rem;
-    }
-    .uf-input:focus { outline: none; border-color: var(--pink); }
-    .uf-dropzone {
-      border: 1px dashed var(--border); border-radius: 2px;
-      padding: 2rem 1.5rem; text-align: center; cursor: pointer;
-      transition: border-color 0.2s, background 0.2s; position: relative;
-      background: #fff; margin-bottom: 1rem;
-    }
-    .uf-dropzone:hover, .uf-dropzone.drag-over { border-color: var(--pink); background: rgba(242,179,206,0.06); }
-    .uf-dropzone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
-    .uf-dz-icon { color: var(--pink); margin-bottom: 0.7rem; }
-    .uf-dz-text { font-size: 0.82rem; color: var(--gray); line-height: 1.6; }
-    .uf-dz-hint { font-size: 0.68rem; color: var(--gray); opacity: 0.7; margin-top: 0.3rem; }
-    .uf-submit {
-      width: 100%; background: var(--dark); border: none; border-radius: 2px;
-      color: #fff; font-family: inherit; font-size: 0.72rem; letter-spacing: 0.22em;
-      text-transform: uppercase; font-weight: 400; padding: 0.9rem 2rem;
-      cursor: pointer; transition: opacity 0.2s;
-    }
-    .uf-submit:hover { opacity: 0.85; }
-    .uf-submit:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* Estado de la cola: honesto y permanente */
-    .uf-cola { margin-top: 1.2rem; font-size: 0.75rem; color: var(--gray); text-align: center; }
-    .uf-cola.tiene-fallos { color: var(--err); }
-    .uf-barra { height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 0.8rem; }
-    .uf-barra span { display: block; height: 100%; background: var(--pink); width: 0; transition: width 0.3s; }
-    .uf-reintentar {
-      margin-top: 0.6rem; background: none; border: none; cursor: pointer;
-      font-family: inherit; font-size: 0.65rem; letter-spacing: 0.14em;
-      text-transform: uppercase; color: var(--err); border-bottom: 1px solid currentColor;
-    }
-    .uf-errores { margin-top: 0.6rem; font-size: 0.68rem; color: var(--err); line-height: 1.5; }
-
-    footer {
-      background: var(--dark); text-align: center; padding: 2rem 1.5rem;
-      color: rgba(255,255,255,0.25); font-size: 0.72rem; letter-spacing: 0.1em;
-    }
-    .footer-sub { margin-top: 0.2rem; font-size: 0.62rem; opacity: 0.5; }
-
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-
-    /* PRE-BODA */
-    .pre-wrap {
-      min-height: calc(100vh - 56px); display: flex; flex-direction: column;
-      align-items: center; justify-content: center; text-align: center; padding: 4rem 1.5rem;
-    }
-    .pre-eyebrow {
-      font-size: 0.62rem; letter-spacing: 0.28em; text-transform: uppercase;
-      color: var(--pink); margin-bottom: 1.2rem;
-    }
-    .pre-title {
-      font-family: 'Sloop', cursive; font-size: clamp(2.8rem, 8vw, 5rem);
-      font-weight: normal; color: var(--dark); line-height: 1.1; margin-bottom: 1.4rem;
-    }
-    .pre-deco { width: 40px; height: 1px; background: var(--rose); margin: 0 auto 2rem; }
-    .pre-text { font-size: 0.88rem; color: var(--gray); line-height: 1.9; max-width: 380px; margin-bottom: 3rem; }
-    .pre-countdown {
-      display: flex; align-items: center; flex-wrap: wrap; justify-content: center;
-      gap: 0.6rem 1rem; margin-bottom: 2.5rem; max-width: 360px;
-    }
-    .pre-cd-block { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-width: 56px; }
-    .pre-cd-num { font-size: clamp(1.8rem, 8vw, 3rem); font-weight: 200; letter-spacing: 0.05em; color: var(--dark); line-height: 1; }
-    .pre-cd-label { font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray); }
-    .pre-cd-sep { font-size: 1.2rem; color: var(--rose); margin-bottom: 1rem; }
-    @media (max-width: 380px) { .pre-cd-sep { display: none; } }
-    .pre-badge {
-      font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase;
-      color: var(--pink); border: 1px solid var(--rose); padding: 0.45rem 1.4rem; border-radius: 50px;
-    }
+    /* ── PRE-BODA ──────────────────────────────────────────────────── */
+    .pre { min-height: calc(100dvh - var(--nav-h)); display: flex; flex-direction: column;
+           align-items: center; justify-content: center; text-align: center; padding: var(--s8) var(--s5); }
+    .pre-titulo { font-family: 'Sloop', cursive; font-size: clamp(2.8rem, 8vw, 5rem); color: var(--dark); line-height: 1.1; margin-bottom: var(--s4); }
+    .pre-deco { width: 40px; height: 1px; background: var(--rose); margin: 0 auto var(--s6); }
+    .pre-texto { font-size: 0.9rem; color: var(--gray); line-height: 1.9; max-width: 34ch; margin-bottom: var(--s7); }
+    .cuenta { display: flex; align-items: flex-start; justify-content: center; gap: var(--s4); margin-bottom: var(--s6); }
+    .cuenta-bloque { display: flex; flex-direction: column; align-items: center; gap: 0.3rem; min-width: 54px; }
+    .cuenta-num { font-size: clamp(1.8rem, 8vw, 2.8rem); font-weight: 200; color: var(--dark); line-height: 1; }
+    .cuenta-etiqueta { font-size: 0.52rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gray); }
+    .pre-insignia { font-size: 0.62rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--pink-deep); border: 1px solid var(--rose); padding: 0.45rem 1.4rem; border-radius: 100px; }
   </style>
 </head>
 <body>
 
-  <nav>
-    <!-- href real, no history.back(): los invitados llegan por QR, sin historial. -->
-    <a href="/" class="nav-back">← inicio</a>
-    <img src="/logo-positivo.png" alt="A&D" class="nav-logo" />
-    <a href="#subir" class="nav-upload-btn" id="navSubir">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-        <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-      </svg>
-      Subir
+  <nav class="barra">
+    <a href="/" class="barra-atras">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      Inicio
     </a>
+    <span class="barra-titulo">Fotos</span>
+    <span class="barra-vivo" id="vivo"><span class="punto"></span><span id="vivoTexto">En directo</span></span>
   </nav>
 
   <!-- PRE-BODA -->
   <div id="preBoda" hidden>
-    <div class="pre-wrap">
-      <p class="pre-eyebrow">Galería</p>
-      <h2 class="pre-title">Las fotos del día</h2>
+    <div class="pre">
+      <h2 class="pre-titulo">Las fotos del día</h2>
       <div class="pre-deco"></div>
-      <p class="pre-text">La galería se abre el día de la boda.<br/>Vuelve el 12 de septiembre.</p>
-      <div class="pre-countdown">
-        <div class="pre-cd-block"><span class="pre-cd-num" id="cdDias">—</span><span class="pre-cd-label">días</span></div>
-        <div class="pre-cd-sep">·</div>
-        <div class="pre-cd-block"><span class="pre-cd-num" id="cdHoras">—</span><span class="pre-cd-label">horas</span></div>
-        <div class="pre-cd-sep">·</div>
-        <div class="pre-cd-block"><span class="pre-cd-num" id="cdMins">—</span><span class="pre-cd-label">min</span></div>
-        <div class="pre-cd-sep">·</div>
-        <div class="pre-cd-block"><span class="pre-cd-num" id="cdSegs">—</span><span class="pre-cd-label">seg</span></div>
+      <p class="pre-texto">La galería se abre el día de la boda.<br/>Vuelve el 12 de septiembre.</p>
+      <div class="cuenta">
+        <div class="cuenta-bloque"><span class="cuenta-num" id="cdDias">—</span><span class="cuenta-etiqueta">días</span></div>
+        <div class="cuenta-bloque"><span class="cuenta-num" id="cdHoras">—</span><span class="cuenta-etiqueta">horas</span></div>
+        <div class="cuenta-bloque"><span class="cuenta-num" id="cdMins">—</span><span class="cuenta-etiqueta">min</span></div>
+        <div class="cuenta-bloque"><span class="cuenta-num" id="cdSegs">—</span><span class="cuenta-etiqueta">seg</span></div>
       </div>
-      <span class="pre-badge">12 · 09 · 2026</span>
+      <span class="pre-insignia">12 · 09 · 2026</span>
     </div>
   </div>
 
-  <!-- POST-BODA -->
+  <!-- GALERÍA -->
   <div id="postBoda" hidden>
-    <div class="gl-header">
-      <p class="gl-eyebrow">12 · 09 · 2026</p>
-      <h1 class="gl-title">Fotos</h1>
-      <p class="gl-sub">Aimar & Deborah · Palacio de Murguia</p>
+    <div class="pestanas" id="pestanas" role="tablist">
+      <button class="pestana activa" data-cat="invitados" role="tab" aria-selected="true">Invitados</button>
+      <button class="pestana" data-cat="todas"     role="tab" aria-selected="false" hidden>Reportaje</button>
+      <button class="pestana" data-cat="ceremonia" role="tab" aria-selected="false" hidden>Ceremonia</button>
+      <button class="pestana" data-cat="cocktail"  role="tab" aria-selected="false" hidden>Cóctel</button>
+      <button class="pestana" data-cat="comida"    role="tab" aria-selected="false" hidden>Comida</button>
+      <button class="pestana" data-cat="baile"     role="tab" aria-selected="false" hidden>Baile</button>
+      <button class="pestana" data-cat="momentos"  role="tab" aria-selected="false" hidden>Momentos</button>
     </div>
 
-    <div class="gl-tabs" id="glTabs" role="tablist">
-      <button class="gl-tab active" data-cat="invitados" role="tab" aria-selected="true">Invitados</button>
-      <button class="gl-tab" data-cat="todas"      role="tab" aria-selected="false" hidden>Reportaje</button>
-      <button class="gl-tab" data-cat="ceremonia"  role="tab" aria-selected="false" hidden>Ceremonia</button>
-      <button class="gl-tab" data-cat="cocktail"   role="tab" aria-selected="false" hidden>Cocktail</button>
-      <button class="gl-tab" data-cat="comida"     role="tab" aria-selected="false" hidden>Comida</button>
-      <button class="gl-tab" data-cat="baile"      role="tab" aria-selected="false" hidden>Baile</button>
-      <button class="gl-tab" data-cat="momentos"   role="tab" aria-selected="false" hidden>Momentos</button>
-    </div>
+    <div class="rejilla-envoltorio">
+      <div class="rejilla" id="rejilla"></div>
 
-    <div class="gl-grid-wrap">
-      <div class="gl-grid" id="glGrid"></div>
-      <div class="gl-empty" id="glEmpty">
-        <svg class="gl-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
-        </svg>
-        <p class="gl-empty-title" id="glEmptyTitle">Aún no hay fotos</p>
-        <p class="gl-empty-sub" id="glEmptySub">¡Sé el primero! Usa el botón «Subir» de arriba.</p>
-      </div>
-      <p class="gl-estado" id="glEstado"></p>
-    </div>
-
-    <section class="upload-section" id="subir">
-      <div class="upload-inner">
-        <div class="upload-header">
-          <p class="upload-eyebrow">Comparte tus fotos</p>
-          <h2 class="upload-title">Sube tus fotos</h2>
+      <div class="vacio" id="vacio">
+        <div class="vacio-icono">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/>
+            <circle cx="12" cy="13" r="3.2"/>
+          </svg>
         </div>
-
-        <form id="uploadForm">
-          <label class="uf-label" for="ufNombre">Tu nombre</label>
-          <input class="uf-input" type="text" id="ufNombre" placeholder="Escribe tu nombre" autocomplete="name" required />
-
-          <label class="uf-label">Fotos y vídeos</label>
-          <div class="uf-dropzone" id="ufDropzone">
-            <input type="file" id="ufFileInput" accept="image/*,video/*" multiple />
-            <div class="uf-dz-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-            </div>
-            <p class="uf-dz-text">Toca para elegir del carrete</p>
-            <p class="uf-dz-hint">Vídeos de hasta 15 segundos</p>
-            <p class="uf-dz-hint" id="ufFileCount"></p>
-          </div>
-
-          <button type="submit" class="uf-submit" id="ufSubmitBtn">Subir</button>
-        </form>
-
-        <div class="uf-cola" id="ufCola" hidden>
-          <div class="uf-barra"><span id="ufBarra"></span></div>
-          <p id="ufColaTexto"></p>
-          <p class="uf-errores" id="ufErrores"></p>
-          <button class="uf-reintentar" id="ufReintentar" hidden>Reintentar lo que falló</button>
-        </div>
+        <h2 class="vacio-titulo" id="vacioTitulo">Empieza tú</h2>
+        <p class="vacio-texto" id="vacioTexto">Todavía no hay ninguna foto. Sube la primera y ábrele el álbum a todos.</p>
+        <button class="vacio-boton" id="vacioBoton">Añadir mis fotos</button>
       </div>
-    </section>
+    </div>
   </div>
 
-  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true">
-    <button class="lb-close" id="lbClose" aria-label="Cerrar">✕</button>
-    <button class="lb-prev" id="lbPrev" aria-label="Anterior">‹</button>
-    <div id="lbSlot"></div>
-    <button class="lb-next" id="lbNext" aria-label="Siguiente">›</button>
-    <p class="lb-caption" id="lbCaption"></p>
+  <!-- ACCIÓN PRINCIPAL -->
+  <div class="fab-zona" id="fabZona" hidden>
+    <button class="fab" id="fab" aria-label="Añadir fotos y vídeos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/>
+        <circle cx="12" cy="13" r="3.2"/>
+      </svg>
+      Añadir fotos
+    </button>
+
+    <div class="progreso" id="progreso" hidden>
+      <div class="progreso-fila">
+        <span class="progreso-texto" id="progresoTexto"></span>
+        <button class="progreso-accion" id="progresoAccion" hidden></button>
+      </div>
+      <div class="progreso-barra"><span id="progresoBarra"></span></div>
+      <p class="progreso-motivo" id="progresoMotivo" hidden></p>
+    </div>
   </div>
 
-  <footer>
-    <p>Aimar & Deborah · 12 · 09 · 2026</p>
-    <p class="footer-sub">deborahyaimar.com</p>
-  </footer>
+  <input type="file" id="selector" accept="image/*,video/*" multiple hidden />
+
+  <!-- NOMBRE (una sola vez) -->
+  <div class="velo" id="velo"></div>
+  <div class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaTitulo">
+    <div class="hoja-tirador"></div>
+    <h2 class="hoja-titulo" id="hojaTitulo">¿Quién eres?</h2>
+    <p class="hoja-texto">Para que Aimar y Deborah sepan de quién es cada foto.</p>
+    <input class="hoja-input" type="text" id="nombreInput" placeholder="Tu nombre" autocomplete="name" enterkeyhint="done" />
+    <button class="hoja-boton" id="hojaBoton">Continuar</button>
+  </div>
+
+  <!-- VISOR -->
+  <div class="visor" id="visor" role="dialog" aria-modal="true">
+    <button class="visor-cerrar" id="visorCerrar" aria-label="Cerrar">✕</button>
+    <button class="visor-ant" id="visorAnt" aria-label="Anterior">‹</button>
+    <div id="visorSlot"></div>
+    <button class="visor-sig" id="visorSig" aria-label="Siguiente">›</button>
+    <div class="visor-pie">
+      <span id="visorQuien"></span>
+      <button class="visor-borrar" id="visorBorrar" hidden>Borrar mi foto</button>
+    </div>
+  </div>
+
+  <div class="aviso" id="aviso"></div>
 
 <script>
   import { procesar, ErrorMedio } from '../lib/media';
   import { ColaSubida } from '../lib/uploadQueue';
 
   const API = import.meta.env.PUBLIC_API_BASE ?? '';
-
-  // Galería ABIERTA desde ya: los invitados pueden subir antes de la boda
-  // (despedida, preparativos, la comida del día anterior...).
-  //
-  // Para volver a cerrarla hasta el día de la boda, basta con poner:
-  //   const APERTURA = new Date('2026-09-12T00:00:00+02:00');
-  // La hora lleva +02:00 (Madrid en septiembre) a propósito, para que se abra
-  // a la vez para todos sin depender de la zona horaria del móvil.
-  const APERTURA: Date | null = null;
-  const BODA = new Date('2026-09-12T00:00:00+02:00');
-  const abierta = APERTURA === null || new Date() >= APERTURA;
-
   const $ = (id: string) => document.getElementById(id)!;
+
+  // Galería abierta desde ya. Para cerrarla hasta el día de la boda:
+  //   const APERTURA = new Date('2026-09-12T00:00:00+02:00');
+  const APERTURA: Date | null = null;
+  const abierta = APERTURA === null || new Date() >= APERTURA;
 
   $('preBoda').hidden = abierta;
   $('postBoda').hidden = !abierta;
-  ($('navSubir') as HTMLElement).hidden = !abierta;
+  $('fabZona').hidden = !abierta;
 
-  // ── CUENTA ATRÁS ────────────────────────────────────────────────────
   if (!abierta && APERTURA) {
     const tick = () => {
       const diff = APERTURA.getTime() - Date.now();
@@ -399,13 +439,11 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       $('cdMins').textContent  = p(Math.floor((diff % 3600000) / 60000));
       $('cdSegs').textContent  = p(Math.floor((diff % 60000) / 1000));
     };
-    tick();
-    setInterval(tick, 1000);
+    tick(); setInterval(tick, 1000);
   } else {
-    arrancarGaleria();
+    arrancar();
   }
 
-  // ── GALERÍA ─────────────────────────────────────────────────────────
   interface Item {
     id: string; tipo: 'foto' | 'video'; categoria: string | null;
     nombre: string; deviceId: string;
@@ -413,117 +451,185 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     duracion: number | null; ancho: number; alto: number; ts: number;
   }
 
-  function arrancarGaleria() {
-    const grid    = $('glGrid');
-    const vacio   = $('glEmpty');
-    const estado  = $('glEstado');
-    const tabs    = Array.from(document.querySelectorAll<HTMLButtonElement>('.gl-tab'));
+  function arrancar() {
+    const rejilla = $('rejilla');
+    const vacio = $('vacio');
+    const pestanas = Array.from(document.querySelectorAll<HTMLButtonElement>('.pestana'));
 
-    let cat: string = 'invitados';
+    let cat = 'invitados';
     let invitados: Item[] = [];
     let oficiales: Item[] = [];
-    const pintados = new Set<string>();
+    let columnas: HTMLElement[] = [];
+    let numColumnas = 0;
+    const nodos = new Map<string, HTMLElement>();
 
-    const visibles = (): Item[] => {
-      if (cat === 'invitados') return invitados;
-      if (cat === 'todas') return oficiales;
-      return oficiales.filter((i) => i.categoria === cat);
-    };
+    const deviceId = localStorage.getItem('ad-device') ?? crypto.randomUUID();
+    localStorage.setItem('ad-device', deviceId);
+    let miNombre = localStorage.getItem('ad-nombre') ?? '';
 
-    function tarjeta(item: Item, indice: number): HTMLElement {
-      const div = document.createElement('div');
-      div.className = 'gl-item';
-      div.dataset.id = item.id;
-      div.style.animationDelay = `${Math.min(indice, 8) * 35}ms`;
-      // Reserva el hueco antes de que cargue la imagen: sin esto el masonry
-      // baila mientras entran fotos nuevas.
-      if (item.ancho && item.alto) div.style.aspectRatio = `${item.ancho} / ${item.alto}`;
+    let hayFotos = false;
+    let subiendo = false;
+
+    /** El flotante solo aparece si no manda el botón grande del estado vacío
+        y no está ocupada la barra de progreso: nunca dos botones iguales. */
+    function sincronizarFab() {
+      const fabEl = document.getElementById('fab') as HTMLElement | null;
+      if (!fabEl) return;
+      fabEl.hidden = subiendo || !hayFotos;
+    }
+
+    const visibles = (): Item[] =>
+      cat === 'invitados' ? invitados
+      : cat === 'todas' ? oficiales
+      : oficiales.filter((i) => i.categoria === cat);
+
+    // ── AVISOS ────────────────────────────────────────────────────
+    let avisoTimer: number;
+    function avisar(texto: string) {
+      const el = $('aviso');
+      el.textContent = texto;
+      el.classList.add('visible');
+      clearTimeout(avisoTimer);
+      avisoTimer = window.setTimeout(() => el.classList.remove('visible'), 3600);
+    }
+
+    // ── REJILLA ───────────────────────────────────────────────────
+    function columnasParaAncho(): number {
+      const w = window.innerWidth;
+      if (w >= 1200) return 5;
+      if (w >= 900) return 4;
+      if (w >= 560) return 3;
+      return 2;
+    }
+
+    function crearTarjeta(item: Item): HTMLElement {
+      const b = document.createElement('button');
+      b.className = 'tarjeta';
+      b.type = 'button';
+      b.dataset.id = item.id;
+      if (item.ancho && item.alto) b.style.aspectRatio = `${item.ancho} / ${item.alto}`;
+      if (item.deviceId && item.deviceId === deviceId) b.classList.add('tarjeta-mia');
 
       const img = document.createElement('img');
       img.src = item.tipo === 'video' ? (item.poster ?? item.thumb) : item.thumb;
       img.loading = 'lazy';
       img.decoding = 'async';
       img.alt = item.nombre ? `Foto de ${item.nombre}` : 'Foto de la boda';
-      div.appendChild(img);
+      b.appendChild(img);
 
       if (item.tipo === 'video') {
-        const play = document.createElement('div');
-        play.className = 'gl-play';
-        play.innerHTML = '<span>▶</span>';
-        div.appendChild(play);
-        if (item.duracion) {
-          const dur = document.createElement('span');
-          dur.className = 'gl-dur';
-          dur.textContent = `${Math.round(item.duracion)}s`;
-          div.appendChild(dur);
-        }
+        const ins = document.createElement('span');
+        ins.className = 'insignia';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('fill', 'currentColor');
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M8 5v14l11-7z');
+        svg.appendChild(path);
+        ins.appendChild(svg);
+        if (item.duracion) ins.appendChild(document.createTextNode(`${Math.round(item.duracion)}s`));
+        b.appendChild(ins);
       }
 
       if (item.nombre) {
-        const etiqueta = document.createElement('span');
-        etiqueta.className = 'gl-item-name';
-        // textContent, nunca innerHTML: el nombre lo escribe un invitado.
-        etiqueta.textContent = item.nombre;
-        div.appendChild(etiqueta);
+        const quien = document.createElement('span');
+        quien.className = 'tarjeta-quien';
+        quien.textContent = item.deviceId === deviceId ? `${item.nombre} · tuya` : item.nombre;
+        b.appendChild(quien);
       }
 
-      div.addEventListener('click', () => abrirLightbox(item.id));
-      return div;
+      b.addEventListener('click', () => abrirVisor(item.id));
+      return b;
     }
 
-    /** Render incremental: solo añade lo nuevo, nunca repinta la rejilla entera. */
-    function render(reinicia = false) {
-      if (reinicia) { grid.replaceChildren(); pintados.clear(); }
+    /** Reparte en columnas reales, en orden. La más nueva queda arriba a la izquierda. */
+    function pintar() {
       const items = visibles();
+      const n = columnasParaAncho();
 
+      if (n !== numColumnas) {
+        numColumnas = n;
+        rejilla.replaceChildren();
+        columnas = Array.from({ length: n }, () => {
+          const c = document.createElement('div');
+          c.className = 'columna';
+          rejilla.appendChild(c);
+          return c;
+        });
+      }
+
+      const vistos = new Set<string>();
       items.forEach((item, i) => {
-        if (pintados.has(item.id)) return;
-        pintados.add(item.id);
-        const nodo = tarjeta(item, i);
-        // Los más nuevos van arriba.
-        const primero = grid.firstElementChild;
-        if (primero && Number(primero.getAttribute('data-ts') ?? 0) < item.ts) {
-          grid.insertBefore(nodo, primero);
+        vistos.add(item.id);
+        let nodo = nodos.get(item.id);
+        if (!nodo) {
+          nodo = crearTarjeta(item);
+          nodos.set(item.id, nodo);
         } else {
-          grid.appendChild(nodo);
+          nodo.style.animation = 'none';   // ya estaba: que no vuelva a entrar
         }
-        nodo.setAttribute('data-ts', String(item.ts));
+        // Re-anexar un nodo existente lo mueve sin recargar la imagen
+        columnas[i % n]!.appendChild(nodo);
       });
 
-      vacio.classList.toggle('visible', items.length === 0);
+      for (const [id, nodo] of nodos) {
+        if (!vistos.has(id)) { nodo.remove(); nodos.delete(id); }
+      }
+
+      const sinFotos = items.length === 0;
+      vacio.classList.toggle('visible', sinFotos);
+      rejilla.style.display = sinFotos ? 'none' : 'flex';
+      hayFotos = !sinFotos;
+      sincronizarFab();
+
       if (cat === 'invitados') {
-        $('glEmptyTitle').textContent = 'Aún no hay fotos';
-        $('glEmptySub').textContent = '¡Sé el primero! Usa el botón «Subir» de arriba.';
-        estado.textContent = items.length ? `${items.length} fotos · se actualiza sola` : '';
+        $('vacioTitulo').textContent = 'Empieza tú';
+        $('vacioTexto').textContent = 'Todavía no hay ninguna foto. Sube la primera y ábrele el álbum a todos.';
+        ($('vacioBoton') as HTMLElement).hidden = false;
       } else {
-        $('glEmptyTitle').textContent = 'El reportaje llegará pronto';
-        $('glEmptySub').textContent = 'Cuando el fotógrafo nos entregue las fotos, aparecerán aquí.';
-        estado.textContent = items.length ? `${items.length} fotos` : '';
+        $('vacioTitulo').textContent = 'Muy pronto';
+        $('vacioTexto').textContent = 'Cuando el fotógrafo entregue el reportaje, aparecerá aquí.';
+        ($('vacioBoton') as HTMLElement).hidden = true;
+      }
+
+      const vivo = $('vivo');
+      if (cat === 'invitados' && items.length) {
+        $('vivoTexto').textContent = `${items.length}`;
+        vivo.classList.add('visible');
+      } else {
+        vivo.classList.remove('visible');
       }
     }
 
-    // ── LIGHTBOX ──────────────────────────────────────────────────────
-    const lb = $('lightbox');
-    const slot = $('lbSlot');
-    let lbId: string | null = null;
+    let anchoPrevio = window.innerWidth;
+    addEventListener('resize', () => {
+      if (columnasParaAncho() !== numColumnas || Math.abs(window.innerWidth - anchoPrevio) > 80) {
+        anchoPrevio = window.innerWidth;
+        pintar();
+      }
+    });
 
-    function abrirLightbox(id: string) {
-      lbId = id;
-      pintarLightbox();
-      lb.classList.add('open');
+    // ── VISOR ─────────────────────────────────────────────────────
+    const visor = $('visor');
+    const slot = $('visorSlot');
+    let visorId: string | null = null;
+
+    function abrirVisor(id: string) {
+      visorId = id;
+      pintarVisor();
+      visor.classList.add('abierto');
       document.body.style.overflow = 'hidden';
     }
-    function cerrarLightbox() {
-      lb.classList.remove('open');
+    function cerrarVisor() {
+      visor.classList.remove('abierto');
       slot.replaceChildren();
       document.body.style.overflow = '';
-      lbId = null;
+      visorId = null;
     }
-    function pintarLightbox() {
+    function pintarVisor() {
       const items = visibles();
-      const item = items.find((i) => i.id === lbId);
-      if (!item) { cerrarLightbox(); return; }
-
+      const item = items.find((i) => i.id === visorId);
+      if (!item) { cerrarVisor(); return; }
       slot.replaceChildren();
       if (item.tipo === 'video') {
         const v = document.createElement('video');
@@ -536,54 +642,66 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         img.alt = item.nombre ? `Foto de ${item.nombre}` : 'Foto de la boda';
         slot.appendChild(img);
       }
-      $('lbCaption').textContent = item.nombre ?? '';
+      $('visorQuien').textContent = item.nombre ?? '';
+      ($('visorBorrar') as HTMLElement).hidden = item.deviceId !== deviceId;
     }
-    /** Avanza por id, no por índice: las fotos que entran en vivo no te mueven. */
     function paso(dir: number) {
       const items = visibles();
-      const i = items.findIndex((x) => x.id === lbId);
+      const i = items.findIndex((x) => x.id === visorId);
       if (i < 0) return;
-      lbId = items[(i + dir + items.length) % items.length]!.id;
-      pintarLightbox();
+      visorId = items[(i + dir + items.length) % items.length]!.id;
+      pintarVisor();
     }
 
-    $('lbClose').addEventListener('click', cerrarLightbox);
-    $('lbPrev').addEventListener('click', () => paso(-1));
-    $('lbNext').addEventListener('click', () => paso(1));
-    lb.addEventListener('click', (e) => { if (e.target === lb) cerrarLightbox(); });
+    $('visorCerrar').addEventListener('click', cerrarVisor);
+    $('visorAnt').addEventListener('click', () => paso(-1));
+    $('visorSig').addEventListener('click', () => paso(1));
+    visor.addEventListener('click', (e) => { if (e.target === visor) cerrarVisor(); });
     document.addEventListener('keydown', (e) => {
-      if (!lb.classList.contains('open')) return;
-      if (e.key === 'Escape') cerrarLightbox();
+      if (!visor.classList.contains('abierto')) return;
+      if (e.key === 'Escape') cerrarVisor();
       if (e.key === 'ArrowLeft') paso(-1);
       if (e.key === 'ArrowRight') paso(1);
     });
-
-    // Swipe: en el móvil nadie acierta a las flechitas.
     let x0 = 0, y0 = 0;
-    lb.addEventListener('touchstart', (e) => {
-      x0 = e.touches[0]!.clientX; y0 = e.touches[0]!.clientY;
-    }, { passive: true });
-    lb.addEventListener('touchend', (e) => {
+    visor.addEventListener('touchstart', (e) => { x0 = e.touches[0]!.clientX; y0 = e.touches[0]!.clientY; }, { passive: true });
+    visor.addEventListener('touchend', (e) => {
       const dx = e.changedTouches[0]!.clientX - x0;
       const dy = e.changedTouches[0]!.clientY - y0;
+      if (Math.abs(dy) > 90 && Math.abs(dy) > Math.abs(dx)) { cerrarVisor(); return; }
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) paso(dx < 0 ? 1 : -1);
     }, { passive: true });
 
-    // ── TABS ──────────────────────────────────────────────────────────
-    tabs.forEach((btn) => {
+    $('visorBorrar').addEventListener('click', async () => {
+      const id = visorId;
+      if (!id || !confirm('¿Quitar esta foto de la galería?')) return;
+      invitados = invitados.filter((i) => i.id !== id);
+      cerrarVisor(); pintar();
+      avisar('Foto quitada');
+      try {
+        await fetch(`${API}/moderar`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, deviceId, ocultar: true }),
+        });
+      } catch {}
+    });
+
+    // ── PESTAÑAS ──────────────────────────────────────────────────
+    pestanas.forEach((btn) => {
       btn.addEventListener('click', () => {
-        tabs.forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
-        btn.classList.add('active');
-        btn.setAttribute('aria-selected', 'true');
+        pestanas.forEach((b) => { b.classList.remove('activa'); b.setAttribute('aria-selected', 'false'); });
+        btn.classList.add('activa'); btn.setAttribute('aria-selected', 'true');
         cat = btn.dataset.cat!;
-        render(true);
+        nodos.forEach((n) => n.remove()); nodos.clear();
+        numColumnas = 0;
+        pintar();
+        scrollTo({ top: 0, behavior: 'smooth' });
       });
     });
 
-    // ── SONDEO ────────────────────────────────────────────────────────
-    // OJO: siempre la MISMA URL, sin cache-buster. La respuesta está cacheada
-    // en el borde 15 s; añadir ?t=Date.now() saltaría la caché y recrearía
-    // exactamente el fallo que tumbaba la galería con 150 invitados.
+    // ── DATOS ─────────────────────────────────────────────────────
+    // Siempre la MISMA URL: la respuesta se sirve de la caché del borde.
+    // Un ?t=Date.now() la saltaría y recrearía el fallo que tumbaba la galería.
     async function traer(origen: 'invitado' | 'oficial'): Promise<Item[] | null> {
       try {
         const url = origen === 'oficial' ? `${API}/indice.json?origen=oficial` : `${API}/indice.json`;
@@ -594,117 +712,148 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       } catch { return null; }
     }
 
+    let primeraCarga = true;
     async function refrescar() {
       const [inv, ofi] = await Promise.all([traer('invitado'), traer('oficial')]);
-      // Si falla la red, conserva lo que ya había: nunca vaciar la galería
-      // por un error puntual (el bug original hacía justo eso).
+      const antes = invitados.length;
+      // Ante un fallo de red, conservar lo que ya había: nunca vaciar la galería.
       if (inv) invitados = inv;
       if (ofi) oficiales = ofi;
 
       const hayOficiales = oficiales.length > 0;
-      tabs.forEach((b) => {
-        if (b.dataset.cat !== 'invitados') b.hidden = !hayOficiales;
-      });
-      render();
+      pestanas.forEach((b) => { if (b.dataset.cat !== 'invitados') b.hidden = !hayOficiales; });
+      $('pestanas').classList.toggle('visible', hayOficiales);
+
+      pintar();
+
+      if (!primeraCarga && cat === 'invitados' && invitados.length > antes) {
+        const nuevas = invitados.length - antes;
+        avisar(nuevas === 1 ? 'Una foto nueva' : `${nuevas} fotos nuevas`);
+      }
+      primeraCarga = false;
     }
 
     refrescar();
     setInterval(refrescar, 15_000);
 
-    // ── SUBIDA ────────────────────────────────────────────────────────
+    // ── SUBIDA ────────────────────────────────────────────────────
     const cola = new ColaSubida(API);
-    const form = $('uploadForm') as HTMLFormElement;
-    const input = $('ufFileInput') as HTMLInputElement;
-    const nombreInput = $('ufNombre') as HTMLInputElement;
-    const boton = $('ufSubmitBtn') as HTMLButtonElement;
-    const cuenta = $('ufFileCount');
-    const panel = $('ufCola');
-    const barra = $('ufBarra');
-    const texto = $('ufColaTexto');
-    const errores = $('ufErrores');
-    const reintentar = $('ufReintentar') as HTMLButtonElement;
+    const selector = $('selector') as HTMLInputElement;
+    const progreso = $('progreso') as HTMLElement;
+    const hoja = $('hoja');
+    const velo = $('velo');
+    let pendientes: File[] = [];
 
-    // El nombre se pide una vez y se recuerda.
-    const deviceId = localStorage.getItem('ad-device') ?? crypto.randomUUID();
-    localStorage.setItem('ad-device', deviceId);
-    nombreInput.value = localStorage.getItem('ad-nombre') ?? '';
+    const abrirSelector = () => selector.click();
+    $('fab').addEventListener('click', abrirSelector);
+    $('vacioBoton').addEventListener('click', abrirSelector);
 
-    input.addEventListener('change', () => {
-      const n = input.files?.length ?? 0;
-      cuenta.textContent = n ? `${n} archivo${n > 1 ? 's' : ''} seleccionado${n > 1 ? 's' : ''}` : '';
+    function abrirHoja() {
+      ($('nombreInput') as HTMLInputElement).value = miNombre;
+      velo.classList.add('abierto');
+      hoja.classList.add('abierta');
+      setTimeout(() => ($('nombreInput') as HTMLInputElement).focus(), 350);
+    }
+    function cerrarHoja() {
+      velo.classList.remove('abierto');
+      hoja.classList.remove('abierta');
+    }
+    velo.addEventListener('click', cerrarHoja);
+
+    async function confirmarNombre() {
+      const v = ($('nombreInput') as HTMLInputElement).value.trim();
+      if (!v) return;
+      miNombre = v;
+      localStorage.setItem('ad-nombre', v);
+      cerrarHoja();
+      await encolar();
+    }
+    $('hojaBoton').addEventListener('click', confirmarNombre);
+    $('nombreInput').addEventListener('keydown', (e) => {
+      if ((e as KeyboardEvent).key === 'Enter') confirmarNombre();
     });
 
-    const dz = $('ufDropzone');
-    dz.addEventListener('dragover', (e) => { e.preventDefault(); dz.classList.add('drag-over'); });
-    dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-    dz.addEventListener('drop', (e) => {
-      e.preventDefault(); dz.classList.remove('drag-over');
-      const dt = (e as DragEvent).dataTransfer;
-      if (dt?.files?.length) { input.files = dt.files; input.dispatchEvent(new Event('change')); }
+    selector.addEventListener('change', async () => {
+      pendientes = Array.from(selector.files ?? []);
+      selector.value = '';
+      if (!pendientes.length) return;
+      // El nombre se pide una sola vez, y después de elegir: primero el premio.
+      if (!miNombre) abrirHoja(); else await encolar();
     });
 
-    cola.alCambiar((r) => {
-      if (!r.total) { panel.hidden = true; return; }
-      panel.hidden = false;
-      const pct = r.total ? Math.round((r.hechos / r.total) * 100) : 0;
-      barra.style.width = `${pct}%`;
-
-      const enCola = r.pendientes - r.reintentando;
-      const partes: string[] = [];
-      if (r.hechos)       partes.push(`${r.hechos} de ${r.total} subidas`);
-      if (r.subiendo)     partes.push(`${r.subiendo} en curso`);
-      if (r.reintentando) partes.push(`${r.reintentando} reintentando`);
-      if (enCola > 0)     partes.push(`${enCola} en cola`);
-      if (r.fallidos)     partes.push(`${r.fallidos} fallidas`);
-      texto.textContent = partes.join(' · ');
-
-      panel.classList.toggle('tiene-fallos', r.fallidos > 0);
-      reintentar.hidden = r.fallidos === 0;
-      errores.textContent = r.items
-        .filter((i) => i.estado === 'fallido' && i.error)
-        .map((i) => i.error)
-        .slice(0, 3)
-        .join(' · ');
-
-      // Solo se da por bueno cuando el servidor lo confirmó todo.
-      if (r.hechos === r.total && !r.fallidos) {
-        texto.textContent = `¡Gracias! ${r.hechos} archivo${r.hechos > 1 ? 's' : ''} en la galería.`;
-        refrescar();
-      }
-    });
-
-    reintentar.addEventListener('click', () => cola.reintentarFallidos());
-
-    form.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const archivos = Array.from(input.files ?? []);
+    async function encolar() {
+      const archivos = pendientes;
+      pendientes = [];
       if (!archivos.length) return;
-      if (!API) { errores.textContent = 'La subida aún no está configurada.'; panel.hidden = false; return; }
+      if (!API) { avisar('La subida no está configurada.'); return; }
 
-      const nombre = nombreInput.value.trim();
-      localStorage.setItem('ad-nombre', nombre);
+      subiendo = true;
+      sincronizarFab();
+      progreso.hidden = false;
+      $('progresoTexto').textContent = archivos.length === 1 ? 'Preparando la foto…' : `Preparando ${archivos.length} archivos…`;
 
-      boton.disabled = true;
-      boton.textContent = 'Preparando…';
-      panel.hidden = false;
-
-      const fallos: string[] = [];
+      const errores: string[] = [];
       for (const archivo of archivos) {
         try {
           const medio = await procesar(archivo);
-          await cola.encolar(medio, nombre, deviceId);
+          await cola.encolar(medio, miNombre, deviceId);
         } catch (err) {
-          fallos.push(err instanceof ErrorMedio ? err.message : `No se pudo procesar «${archivo.name}».`);
+          errores.push(err instanceof ErrorMedio ? err.message : `No se pudo leer «${archivo.name}».`);
         }
       }
+      if (errores.length) avisar(errores[0]!);
+    }
 
-      if (fallos.length) errores.textContent = fallos.join(' ');
-      form.reset();
-      nombreInput.value = nombre;
-      cuenta.textContent = '';
-      boton.disabled = false;
-      boton.textContent = 'Subir';
+    cola.alCambiar((r) => {
+      if (!r.total) { progreso.hidden = true; subiendo = false; sincronizarFab(); return; }
+
+      progreso.hidden = false;
+      subiendo = true;
+      sincronizarFab();
+      $('progresoBarra').style.width = `${Math.round((r.hechos / r.total) * 100)}%`;
+
+      const texto = $('progresoTexto');
+      const accion = $('progresoAccion') as HTMLButtonElement;
+      texto.classList.toggle('error', r.fallidos > 0);
+
+      const motivo = $('progresoMotivo') as HTMLElement;
+
+      if (r.hechos === r.total && !r.fallidos) {
+        texto.textContent = r.hechos === 1 ? '¡Gracias! Ya está en la galería' : `¡Gracias! ${r.hechos} archivos en la galería`;
+        accion.hidden = true;
+        motivo.hidden = true;
+        refrescar();
+        setTimeout(() => { cola.limpiarHechos(); }, 3500);
+        return;
+      }
+
+      const partes: string[] = [];
+      if (r.subiendo || r.pendientes) partes.push(`Subiendo ${r.hechos + 1} de ${r.total}`);
+      if (r.reintentando) partes.push('reintentando');
+      if (r.fallidos) partes.push(r.fallidos === 1 ? '1 foto fallida' : `${r.fallidos} fotos fallidas`);
+      texto.textContent = partes.join(' · ') || `${r.hechos} de ${r.total}`;
+
+      // Decir POR QUÉ falló: no es lo mismo quedarse sin cobertura que subir
+      // un archivo que el servidor rechaza.
+      const primerError = r.items.find((i) => i.estado === 'fallido' && i.error)?.error;
+      if (primerError) {
+        motivo.hidden = false;
+        motivo.textContent = /fetch|network|Failed|NetworkError/i.test(primerError)
+          ? 'Parece que no hay conexión. Se reintentará solo al volver la cobertura.'
+          : primerError;
+      } else {
+        motivo.hidden = true;
+      }
+
+      if (r.fallidos && !r.subiendo && !r.pendientes) {
+        accion.hidden = false;
+        accion.textContent = 'Reintentar';
+      } else {
+        accion.hidden = true;
+      }
     });
+
+    $('progresoAccion').addEventListener('click', () => cola.reintentarFallidos());
   }
 </script>
 

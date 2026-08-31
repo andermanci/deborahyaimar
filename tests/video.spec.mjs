@@ -5,6 +5,15 @@ const fallos = [];
 const ok = (m) => console.log(`  ✓ ${m}`);
 const mal = (m) => { fallos.push(m); console.log(`  ✗ ${m}`); };
 
+/** El nombre se pide una vez, en una hoja, después de elegir los archivos. */
+async function rellenarNombre(pg, nombre) {
+  const hoja = pg.locator('.hoja.abierta');
+  if (await hoja.count()) {
+    await pg.fill('#nombreInput', nombre);
+    await pg.click('#hojaBoton');
+  }
+}
+
 const navegador = await chromium.launch({ channel: 'chrome', args: ['--autoplay-policy=no-user-gesture-required'] });
 const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
 const page = await ctx.newPage();
@@ -72,21 +81,20 @@ const info = await page.evaluate(async () => {
   const file = new File([blob], 'baile.webm', { type: 'video/webm' });
   const dt = new DataTransfer();
   dt.items.add(file);
-  const input = document.getElementById('ufFileInput');
+  const input = document.getElementById('selector');
   input.files = dt.files;
   input.dispatchEvent(new Event('change', { bubbles: true }));
   return { bytes: blob.size };
 });
 console.log(`  vídeo de ${(info.bytes / 1024 / 1024).toFixed(1)} MB (${Math.ceil(info.bytes / PART)} partes esperadas)`);
 
-await page.fill('#ufNombre', 'Ander');
-await page.click('#ufSubmitBtn');
+await rellenarNombre(page, 'Ander');
 
 let listo = false;
 for (let i = 0; i < 60 && !listo; i++) {
   await page.clock.runFor(10_000);
   await page.waitForTimeout(200);
-  listo = (await page.locator('#ufColaTexto').textContent()).includes('Gracias');
+  listo = (await page.locator('#progresoTexto').textContent()).includes('Gracias');
 }
 
 console.log('\nResultado:');

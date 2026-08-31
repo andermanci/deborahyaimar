@@ -6,6 +6,15 @@ const fallos = [];
 const ok = (m) => console.log(`  ✓ ${m}`);
 const mal = (m) => { fallos.push(m); console.log(`  ✗ ${m}`); };
 
+/** El nombre se pide una vez, en una hoja, después de elegir los archivos. */
+async function rellenarNombre(pg, nombre) {
+  const hoja = pg.locator('.hoja.abierta');
+  if (await hoja.count()) {
+    await pg.fill('#nombreInput', nombre);
+    await pg.click('#hojaBoton');
+  }
+}
+
 const nav = await chromium.launch({ channel: 'chrome' });
 const ctx = await nav.newContext({
   viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,
@@ -20,36 +29,36 @@ page.url().includes('/galeria') ? ok('el QR lleva a la galería') : mal(`fue a $
 await page.locator('#postBoda').isVisible() ? ok('LA GALERÍA ESTÁ ABIERTA') : mal('sigue cerrada');
 await page.locator('#preBoda').isHidden() ? ok('sin cuenta atrás') : mal('sigue la cuenta atrás');
 await page.locator('#navSubir').isVisible() ? ok('el botón Subir se ve (y ahora sí lleva a algún sitio)') : mal('el botón Subir sigue oculto');
-const tab = await page.locator('.gl-tab.active').getAttribute('data-cat');
+const tab = await page.locator('.pestana.activa').getAttribute('data-cat');
 tab === 'invitados' ? ok('abre en Invitados') : mal(`abre en ${tab}`);
 
 console.log('\n2) Sube una foto de verdad');
-await page.fill('#ufNombre', 'Ensayo Claude');
-await page.setInputFiles('#ufFileInput', {
+await page.fill('#nombreInput', 'Ensayo Claude');
+await page.setInputFiles('#selector', {
   name: 'boda.jpg', mimeType: 'image/jpeg', buffer: readFileSync('public/foto2.jpg'),
 });
-await page.click('#ufSubmitBtn');
+await rellenarNombre(page, 'Ander');
 await page.waitForFunction(
-  () => document.getElementById('ufColaTexto')?.textContent?.includes('Gracias'),
+  () => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'),
   { timeout: 90000 }
 ).then(() => ok('subida a R2 confirmada por el servidor'))
- .catch(async () => mal(`no completó: "${await page.locator('#ufColaTexto').textContent()}"`));
+ .catch(async () => mal(`no completó: "${await page.locator('#progresoTexto').textContent()}"`));
 
 console.log('\n3) ¿Aparece en la galería?');
 await page.waitForTimeout(18000);
 await page.reload({ waitUntil: 'networkidle' });
-await page.waitForSelector('.gl-item', { timeout: 25000 })
+await page.waitForSelector('.tarjeta', { timeout: 25000 })
   .then(() => ok('la foto aparece en la rejilla')).catch(() => mal('no aparece'));
-const nombre = await page.locator('.gl-item-name').first().textContent().catch(() => '');
+const nombre = await page.locator('.tarjeta-quien').first().textContent().catch(() => '');
 nombre === 'Ensayo Claude' ? ok('con el nombre de quien la subió') : mal(`nombre: "${nombre}"`);
-const src = await page.locator('.gl-item img').first().getAttribute('src').catch(() => '');
+const src = await page.locator('.tarjeta img').first().getAttribute('src').catch(() => '');
 src?.includes('fotos.deborahyaimar.org') ? ok('servida desde fotos.deborahyaimar.org') : mal(`src: ${src}`);
 
 console.log('\n4) Lightbox');
-await page.locator('.gl-item').first().click();
-await page.waitForSelector('.lightbox.open', { timeout: 8000 })
+await page.locator('.tarjeta').first().click();
+await page.waitForSelector('.visor.abierto', { timeout: 8000 })
   .then(() => ok('el lightbox abre')).catch(() => mal('no abre'));
-const grande = await page.locator('#lbSlot img').getAttribute('src').catch(() => '');
+const grande = await page.locator('#visorSlot img').getAttribute('src').catch(() => '');
 grande?.includes('/web.') ? ok('muestra la versión grande, no la miniatura') : mal(`lightbox src: ${grande}`);
 
 console.log('\n5) El mural');
