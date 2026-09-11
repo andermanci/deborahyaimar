@@ -327,6 +327,47 @@ console.log('\nH) Diez cortes de red seguidos y luego vuelve la cobertura');
   await ctx.close();
 }
 
+// ══ I. Parar una fallida cuyo registro no se puede borrar (Safari) ════
+console.log('\nI) Parar una subida fallida que el navegador no deja borrar');
+{
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  // Como Safari con un archivo perdido: el borrado en IndexedDB falla siempre.
+  await ctx.addInitScript(() => {
+    IDBObjectStore.prototype.delete = function () { throw new DOMException('Error preparing Blob/File data', 'UnknownError'); };
+  });
+  const rutas = async (page) => {
+    await page.route('**/firmar', (r) => r.fulfill({ status: 403, contentType: 'application/json', body: '{"error":"no"}' }));
+    await page.route('**/diag', (r) => r.fulfill({ status: 204, body: '' }));
+  };
+  const page = await nuevaPagina(ctx);
+  await rutas(page);
+  await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await page.setInputFiles('#selector', { name: 'x.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await rellenarNombre(page, 'Ander');
+
+  let fallida = false;
+  for (let i = 0; i < 40 && !fallida; i++) {
+    await page.clock.runFor(15_000); await page.waitForTimeout(100);
+    fallida = ((await page.locator('#progresoTexto').textContent()) ?? '').includes('fallida');
+  }
+  fallida ? ok('la subida acaba marcada como fallida') : mal('no llegó a fallar');
+
+  await page.click('#progresoParar');
+  await page.waitForTimeout(800);
+  (await page.locator('#progreso').isHidden()) ? ok('al pararla desaparece') : mal('sigue visible');
+
+  await page.close();
+  const p2 = await nuevaPagina(ctx);
+  await rutas(p2);
+  await p2.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p2.waitForTimeout(2500);
+  const tras = ((await p2.locator('#progresoTexto').textContent()) ?? '').trim();
+  (await p2.locator('#progreso').isHidden()) && tras === ''
+    ? ok('al recargar NO vuelve, aunque el navegador no pudiera borrarla')
+    : mal(`reapareció: "${tras}"`);
+  await ctx.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(52)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Resiliencia correcta');

@@ -58,13 +58,42 @@ export interface SubidaFirmada {
   urls?: string[];
 }
 
+/**
+ * Cómo se guarda cada archivo en la cola.
+ *
+ * Safari PIERDE los Blob guardados en IndexedDB: el registro sigue ahí, pero
+ * el archivo que lo respalda desaparece y ya no se puede leer. Visto en
+ * producción la víspera: las 5 fotos que llevaban hora y media en la cola de
+ * un iPhone eran ilegibles, y cada intento fallaba como «error de red».
+ *
+ * Las fotos (pequeñas) se guardan como bytes dentro del propio registro, que
+ * es lo que Safari no pierde. Los vídeos siguen como Blob: copiarlos en cada
+ * guardado costaría decenas de MB, y si se pierden, se detecta y se dice.
+ */
+export type Guardado = Blob | { bytes: ArrayBuffer; tipo: string };
+const EN_LINEA_HASTA = 8 * 1024 * 1024;
+
+function aBlob(g: Guardado): Blob {
+  return g instanceof Blob ? g : new Blob([g.bytes], { type: g.tipo });
+}
+function tamano(g: Guardado): number {
+  return g instanceof Blob ? g.size : g.bytes.byteLength;
+}
+function tipoDe(g: Guardado): string {
+  return g instanceof Blob ? g.type : g.tipo;
+}
+async function paraGuardar(b: Blob): Promise<Guardado> {
+  if (b.size > EN_LINEA_HASTA) return b;
+  return { bytes: await b.arrayBuffer(), tipo: b.type };
+}
+
 export interface ItemCola {
   id: string;                       // id local, no el del servidor
   estado: EstadoItem;
   tipo: 'foto' | 'video';
   nombre: string;
   deviceId: string;
-  blobs: Record<string, Blob>;      // thumb | web | poster | video
+  blobs: Record<string, Guardado>;  // thumb | web | poster | video
   meta: { ancho: number; alto: number; duracion?: number };
   servidorId?: string;
   claves?: Record<string, string>;  // rol -> key en R2
@@ -145,7 +174,25 @@ function pasarAMemoria(err: unknown) {
   memoria = new Map();
 }
 
+// ── Anulados: lo que el usuario ha parado NO vuelve ───────────────────
+// Safari no siempre consigue borrar de IndexedDB un registro cuyo archivo ha
+// perdido, y el borrado fallaba sin decir nada: al recargar, la subida parada
+// reaparecía. Por eso lo anulado se apunta en localStorage (que no depende de
+// esos archivos) y la cola lo ignora siempre, se haya podido borrar o no.
+const LLAVE_ANULADOS = 'ad-cola-anulados';
+let anulados: Set<string> = (() => {
+  try { return new Set<string>(JSON.parse(localStorage.getItem(LLAVE_ANULADOS) ?? '[]')); }
+  catch { return new Set<string>(); }
+})();
+function anular(ids: string[]) {
+  for (const id of ids) anulados.add(id);
+  try { localStorage.setItem(LLAVE_ANULADOS, JSON.stringify([...anulados].slice(-500))); } catch { /* sin espacio: da igual */ }
+}
+
 async function guardar(item: ItemCola): Promise<void> {
+  // Una subida en vuelo que termina DESPUÉS de pararla no puede volver a
+  // meter el elemento en la cola.
+  if (anulados.has(item.id)) return;
   if (!memoria) {
     try { await tx('readwrite', (s) => s.put(item)); return; } catch (e) { pasarAMemoria(e); }
   }
@@ -153,17 +200,26 @@ async function guardar(item: ItemCola): Promise<void> {
 }
 
 async function borrar(id: string): Promise<void> {
-  if (!memoria) {
-    try { await tx('readwrite', (s) => s.delete(id)); return; } catch (e) { pasarAMemoria(e); }
-  }
-  memoria!.delete(id);
+  if (memoria) { memoria.delete(id); return; }
+  // Si el borrado falla (registro con el archivo perdido), no se abandona
+  // IndexedDB: se anula el id y la cola deja de verlo.
+  try { await tx('readwrite', (s) => s.delete(id)); } catch { anular([id]); }
 }
 
 async function leerTodo(): Promise<ItemCola[]> {
-  if (!memoria) {
-    try { return await tx<ItemCola[]>('readonly', (s) => s.getAll()); } catch (e) { pasarAMemoria(e); }
+  let todos: ItemCola[];
+  if (memoria) {
+    todos = [...memoria.values()];
+  } else {
+    try { todos = await tx<ItemCola[]>('readonly', (s) => s.getAll()); }
+    catch (e) { pasarAMemoria(e); todos = [...memoria!.values()]; }
   }
-  return [...memoria!.values()];
+  // Lo anulado no existe para la cola; de paso se intenta borrar otra vez.
+  const vivos = todos.filter((i) => !anulados.has(i.id));
+  if (vivos.length !== todos.length && !memoria) {
+    for (const i of todos) if (anulados.has(i.id)) void tx('readwrite', (s) => s.delete(i.id)).catch(() => {});
+  }
+  return vivos;
 }
 
 // ── Utilidades ────────────────────────────────────────────────────────
@@ -256,6 +312,7 @@ function subirConProgreso(
 async function fetchConPlazo(
   url: string, opciones: RequestInit, ms: number, externa?: AbortSignal,
 ): Promise<Response> {
+  if (externa?.aborted) throw new Cancelado('Subida cancelada');
   const ctrl = new AbortController();
   const cortar = () => ctrl.abort();
   externa?.addEventListener('abort', cortar, { once: true });
@@ -395,13 +452,15 @@ export class ColaSubida {
     deviceId: string,
     opciones?: OpcionesSubida,
   ): Promise<void> {
-    const blobs: Record<string, Blob> = { thumb: medio.thumb };
+    const crudos: Record<string, Blob> = { thumb: medio.thumb };
     if (medio.tipo === 'foto') {
-      blobs.web = medio.web;
+      crudos.web = medio.web;
     } else {
-      blobs.poster = medio.poster;
-      blobs.video = medio.video;
+      crudos.poster = medio.poster;
+      crudos.video = medio.video;
     }
+    const blobs: Record<string, Guardado> = {};
+    for (const [rol, b] of Object.entries(crudos)) blobs[rol] = await paraGuardar(b);
 
     await guardar({
       id: crypto.randomUUID(),
@@ -440,11 +499,13 @@ export class ColaSubida {
    */
   async cancelarTodo(): Promise<number> {
     this.cancelando = true;
-    for (const ctrl of this.abortadores.values()) ctrl.abort();
-    this.abortadores.clear();
-
     const items = await leerTodo();
     const aQuitar = items.filter((i) => i.estado !== 'hecho');
+    // Primero se anulan (persistente), luego se corta y se borra: así, pase lo
+    // que pase con el borrado o con lo que estaba en vuelo, no reaparecen.
+    anular(aQuitar.map((i) => i.id));
+    for (const ctrl of this.abortadores.values()) ctrl.abort();
+    this.abortadores.clear();
     for (const item of aQuitar) await borrar(item.id);
 
     this.trabajando.clear();
@@ -514,8 +575,8 @@ export class ColaSubida {
       // Safari a veces pierde los archivos guardados en IndexedDB: el blob
       // existe pero no se puede leer, y cada intento falla como «error de red».
       // Mejor detectarlo y decirlo que reintentar para siempre.
-      for (const blob of Object.values(item.blobs)) {
-        try { await blob.slice(0, 16).arrayBuffer(); }
+      for (const guardado of Object.values(item.blobs)) {
+        try { await aBlob(guardado).slice(0, 16).arrayBuffer(); }
         catch { throw new DatosPerdidos('Esta foto ya no está disponible en el móvil. Vuelve a elegirla.'); }
       }
       if (!item.servidorId) await this.firmar(item, ctrl.signal);
@@ -568,10 +629,10 @@ export class ColaSubida {
 
   /** Pide al Worker las URLs prefirmadas. Las claves las decide el servidor. */
   private async firmar(item: ItemCola, senal?: AbortSignal): Promise<void> {
-    const archivos = Object.entries(item.blobs).map(([rol, blob]) => ({
+    const archivos = Object.entries(item.blobs).map(([rol, g]) => ({
       rol,
-      contentType: blob.type || (rol === 'video' ? 'video/mp4' : 'image/webp'),
-      size: blob.size,
+      contentType: tipoDe(g) || (rol === 'video' ? 'video/mp4' : 'image/webp'),
+      size: tamano(g),
     }));
 
     const res = await fetchConPlazo(`${this.api}/firmar`, {
@@ -595,7 +656,7 @@ export class ColaSubida {
     const subidas = item.subidas;
     if (!subidas?.length) throw new Error('Falta la firma de subida');
 
-    const total = Object.values(item.blobs).reduce((a, b) => a + b.size, 0) || 1;
+    const total = Object.values(item.blobs).reduce((a, g) => a + tamano(g), 0) || 1;
     let base = 0;
     const informar = (enviados: number) => {
       this.progreso.set(item.id, Math.min(1, (base + enviados) / total));
@@ -603,8 +664,9 @@ export class ColaSubida {
     };
 
     for (const s of subidas) {
-      const blob = item.blobs[s.rol];
-      if (!blob) continue;
+      const guardado = item.blobs[s.rol];
+      if (!guardado) continue;
+      const blob = aBlob(guardado);
 
       if (s.rol === 'video') {
         await this.subirVideoPorPartes(item, s, blob, senal, (enviadosVideo) => informar(enviadosVideo));
