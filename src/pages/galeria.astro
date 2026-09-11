@@ -164,12 +164,14 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     }
     .vacio-boton:active { transform: scale(0.97); }
 
-    /* ── BOTÓN FLOTANTE: la acción principal, siempre a mano ───────── */
+    /* ── BOTÓN FLOTANTE: la acción principal, siempre a mano ─────────
+       Sin fondo: en iOS 26 la barra de Safari es transparente y la
+       rejilla se ve a través; un degradado aquí queda como una franja
+       crema flotando por encima de la barra. La sombra ya lo despega. */
     .fab-zona {
       position: fixed; left: 0; right: 0; bottom: 0; z-index: 120;
       display: flex; justify-content: center;
       padding: var(--s3) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom, 0px));
-      background: linear-gradient(transparent, rgba(250,248,244,0.85) 35%, var(--cream));
       pointer-events: none;
     }
     .fab {
