@@ -394,7 +394,7 @@
           <p class="medidor-txt" id="descResumen"></p>
           <p class="medidor-txt" style="margin-top:.6rem;opacity:.75">
             Se prepara en tandas para no saturar el móvil. De las fotos de invitados existe
-            la versión de 2560&nbsp;px, de sobra para imprimir en 20×30&nbsp;cm.
+            la versión de 3072&nbsp;px, que da para imprimir en 20×30&nbsp;cm.
           </p>
           <button class="boton ancho" id="btnDescargar">Descargar todo</button>
           <!-- Oculta hasta que haya descarga: el carril vacío en rosa parecía
@@ -430,7 +430,7 @@
 
   const API = import.meta.env.PUBLIC_API_BASE ?? '';
   const $ = (id: string) => document.getElementById(id)!;
-  const POR_TANDA = 150;   // ~75 MB por ZIP: manejable en un móvil
+  const POR_TANDA = 120;   // ~80 MB por ZIP a la calidad actual: manejable en un móvil
 
   let api: AdminApi;
   let todo: MediaAdmin[] = [];

@@ -114,12 +114,12 @@ else {
   const thumb = firmadoCon.archivos.find((a) => a.rol === 'thumb');
   ok(`web: ${(web.size / 1024).toFixed(0)} KB · ${web.contentType}`);
   ok(`thumb: ${(thumb.size / 1024).toFixed(0)} KB · ${thumb.contentType}`);
-  web.size < 700_000 ? ok('web por debajo de 700 KB') : mal(`web demasiado grande: ${web.size}`);
+  web.size < 1_200_000 ? ok('web por debajo de 1,2 MB') : mal(`web demasiado grande: ${web.size}`);
   thumb.size < 80_000 ? ok('thumb por debajo de 80 KB') : mal(`thumb demasiado grande: ${thumb.size}`);
   web.contentType === 'image/webp' ? ok('convertida a webp') : mal(`formato ${web.contentType}`);
 }
 partesRecibidas.length === 2 ? ok('subió exactamente 2 archivos (thumb + web)') : mal(`subió ${partesRecibidas.length}`);
-completadoCon?.ancho === 2560 ? ok(`redimensionada a ${completadoCon.ancho}px de lado largo`) : mal(`ancho ${completadoCon?.ancho}`);
+completadoCon?.ancho === 3072 ? ok(`redimensionada a ${completadoCon.ancho}px de lado largo`) : mal(`ancho ${completadoCon?.ancho}`);
 completadoCon?.nombre === 'Ander' ? ok('registra el nombre') : mal('no registra el nombre');
 
 // ── 6. Persistencia del nombre ───────────────────────────────────────
@@ -318,6 +318,53 @@ console.log('\n11) Cuántas peticiones hace un invitado mirando la galería');
   await p4.waitForTimeout(400);
   peticiones.includes('inv') ? ok('al volver a la pestaña se actualiza sin esperar') : mal('no se actualizó al volver');
   await p4.close();
+}
+
+// ── 12. Peor caso: foto de 13,7 MP de noche, con grano extremo ────────
+console.log('\n12) Foto de noche con mucho grano (las de la fiesta)');
+{
+  const p5 = await ctx.newPage();
+  p5.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  let firmado = null, completado = null;
+  await p5.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p5.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await p5.route('**/firmar', async (r) => {
+    firmado = JSON.parse(r.request().postData());
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'g', subidas: [
+      { rol: 'thumb', key: 'invitados/g/thumb.webp', url: `${BASE}/__put/t` },
+      { rol: 'web',   key: 'invitados/g/web.webp',   url: `${BASE}/__put/w` }]}) });
+  });
+  await p5.route('**/__put/**', (r) => r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' }));
+  await p5.route('**/completar', async (r) => { completado = JSON.parse(r.request().postData());
+    await r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+
+  await p5.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  // 4536×3024 (como un móvil de 13,7 MP) con ruido fuerte: lo peor que se comprime.
+  await p5.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 4536; c.height = 3024;
+    const g = c.getContext('2d');
+    const img = await createImageBitmap(await (await fetch('/foto.jpg')).blob());
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const d = g.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const r = (Math.random() - 0.5) * 70;
+      d.data[i] += r; d.data[i + 1] += r; d.data[i + 2] += r;
+    }
+    g.putImageData(d, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.95));
+    const dt = new DataTransfer(); dt.items.add(new File([blob], 'noche.jpg', { type: 'image/jpeg' }));
+    const input = document.getElementById('selector'); input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  if (await p5.locator('.hoja.abierta').count()) { await p5.fill('#nombreInput', 'Ander'); await p5.click('#hojaBoton'); }
+  await p5.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 90000 })
+    .then(() => ok('la foto con grano se sube sin fallar')).catch(() => mal('falló la foto con grano'));
+  const web = firmado?.archivos?.find((a) => a.rol === 'web');
+  web && web.size <= 6_000_000
+    ? ok(`pesa ${(web.size / 1024 / 1024).toFixed(2)} MB: dentro del tope del servidor (6 MB)`)
+    : mal(`peso fuera de tope: ${web?.size}`);
+  completado?.ancho ? ok(`se guardó a ${completado.ancho}×${completado.alto}`) : mal('sin dimensiones');
+  await p5.close();
 }
 
 await navegador.close();

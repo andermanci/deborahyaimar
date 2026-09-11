@@ -25,7 +25,7 @@ const MAX_INTENTOS = 6;
 // queda colgada y ya no la despierta ni volver la conexión. Todo lo que sale a
 // la red lleva plazo.
 const PLAZO_API = 20_000;      // firmar / completar: son peticiones pequeñas
-const PLAZO_FOTO = 90_000;     // ~500 KB con cobertura mala
+const PLAZO_FOTO = 150_000;    // hasta ~2 MB (foto de noche) con cobertura mala
 const PLAZO_PARTE = 180_000;   // trozo de vídeo de 5 MB
 
 // Red de seguridad para elementos abandonados por una pestaña que murió. Es

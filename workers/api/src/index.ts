@@ -26,8 +26,11 @@ export interface Env {
 // El cliente ya redimensiona antes de subir; esto es la red de seguridad
 // del servidor para que nadie suba un archivo arbitrario al bucket.
 const TIPOS_OK: Record<string, number> = {
-  'image/webp': 2_000_000,     // thumb y web salen del canvas como webp
-  'image/jpeg': 2_000_000,     // fallback si el navegador no da webp
+  // Medido con fotos reales de 13,7 MP: a 3072 px @ 85 % una foto normal pesa
+  // ~650 KB, pero una de noche con grano (las de la fiesta) llega a ~2,2 MB.
+  // Con el tope anterior de 2 MB esas se habrían rechazado.
+  'image/webp': 6_000_000,     // thumb y web salen del canvas como webp
+  'image/jpeg': 6_000_000,     // fallback si el navegador no da webp
   'video/mp4': 100_000_000,
   'video/quicktime': 100_000_000,   // iPhone
   'video/webm': 100_000_000,        // Chrome en Android

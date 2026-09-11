@@ -7,10 +7,18 @@
  * el almacenamiento entra en el tier gratuito de R2.
  */
 
-export const MAX_WEB = 2560;   // suficiente para imprimir en 20x30 cm
+// 3072 px @ 85 %: unos 26 cm a 300 ppp, o 20×30 cm a ~260 ppp. Medido con fotos
+// reales de 13,7 MP: ~650 KB una foto normal (antes, a 2560 @ 82 %, ~450 KB).
+// Las de noche con grano llegan a ~2,2 MB; el servidor admite hasta 6 MB.
+export const MAX_WEB = 3072;
 export const MAX_THUMB = 600;
-export const CALIDAD_WEB = 0.82;
+export const CALIDAD_WEB = 0.85;
 export const CALIDAD_THUMB = 0.75;
+
+// Si pese a todo una foto sale demasiado grande (grano extremo, formato raro),
+// se recomprime más fuerte antes de subirla: ninguna foto debe fallar por peso.
+const TOPE_WEB = 3.5 * 1024 * 1024;
+const REINTENTOS_PESO: [number, number][] = [[3072, 0.75], [2560, 0.72], [2048, 0.7]];
 
 /** Tope duro de duración. La UI anuncia 15 s; aceptamos hasta 20 con margen. */
 export const MAX_SEGUNDOS = 20;
@@ -90,10 +98,16 @@ export async function procesarFoto(archivo: File): Promise<FotoProcesada> {
     const dimWeb = escalar(bitmap.width, bitmap.height, MAX_WEB);
     const dimThumb = escalar(bitmap.width, bitmap.height, MAX_THUMB);
 
-    const web = await aBlob(pintar(bitmap, dimWeb.ancho, dimWeb.alto), mime, CALIDAD_WEB);
+    let web = await aBlob(pintar(bitmap, dimWeb.ancho, dimWeb.alto), mime, CALIDAD_WEB);
+    let dimFinal = dimWeb;
+    for (const [max, q] of REINTENTOS_PESO) {
+      if (web.size <= TOPE_WEB) break;
+      dimFinal = escalar(bitmap.width, bitmap.height, max);
+      web = await aBlob(pintar(bitmap, dimFinal.ancho, dimFinal.alto), mime, q);
+    }
     const thumb = await aBlob(pintar(bitmap, dimThumb.ancho, dimThumb.alto), mime, CALIDAD_THUMB);
 
-    return { tipo: 'foto', thumb, web, ancho: dimWeb.ancho, alto: dimWeb.alto };
+    return { tipo: 'foto', thumb, web, ancho: dimFinal.ancho, alto: dimFinal.alto };
   } finally {
     bitmap.close();
   }
