@@ -802,9 +802,30 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       } catch { /* si falla, se queda con las que ya tenía */ }
     }
 
+    // ── Presupuesto de peticiones ─────────────────────────────────────
+    // El Worker se EJECUTA en cada petición, aunque la respuesta salga de
+    // caché (comprobado con `wrangler tail`: 10 HIT = 10 invocaciones). El plan
+    // gratuito son 100.000 al día, y cada sondeo de cada invitado cuenta.
+    //
+    // Antes: cada 15 s, dos índices, también con la pestaña en segundo plano
+    // → 480/hora por invitado; con 30 personas mirando se superaba el límite y
+    // el Worker respondería error 1027 hasta medianoche UTC.
+    // Ahora: cada 30 s, solo el de invitados, y nada con la pestaña oculta
+    // → ~120/hora. El reportaje no cambia durante la boda: se mira al entrar y
+    // cada 5 minutos. Las fotos propias siguen apareciendo al instante, porque
+    // tras subir se fuerza un refresco aparte.
+    const SONDEO_MS = 30_000;
+    const OFICIAL_CADA = 10;           // 10 × 30 s = cada 5 minutos
+    let vueltas = 0;
+
     let primeraCarga = true;
     async function refrescar(forzar = false) {
-      const [inv, ofi] = await Promise.all([traer('invitado', forzar), traer('oficial', forzar)]);
+      const conOficial = primeraCarga || forzar || vueltas % OFICIAL_CADA === 0;
+      vueltas++;
+      const [inv, ofi] = await Promise.all([
+        traer('invitado', forzar),
+        conOficial ? traer('oficial', forzar) : Promise.resolve(null),
+      ]);
       if (primeraCarga || forzar) await traerCategorias();
       const antes = invitados.length;
       // Ante un fallo de red, conservar lo que ya había: nunca vaciar la galería.
@@ -822,7 +843,14 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     }
 
     refrescar();
-    setInterval(refrescar, 15_000);
+    setInterval(() => {
+      // Con la pestaña oculta no se pregunta nada: nadie está mirando.
+      if (document.visibilityState === 'visible') refrescar();
+    }, SONDEO_MS);
+    // Al volver a la pestaña, ponerse al día sin esperar al siguiente turno.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') refrescar();
+    });
 
     // ── SUBIDA ────────────────────────────────────────────────────
     const cola = new ColaSubida(API);

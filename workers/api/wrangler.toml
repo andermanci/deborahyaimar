@@ -32,7 +32,7 @@ database_id = "37f8a0e9-819a-4239-862f-628b61b9fc0c"
 # Origen permitido para CORS. El sitio sigue alojado en Netlify.
 SITIO = "https://deborahyaimar.com"
 # Base pública de los medios (dominio personalizado de R2).
-# Ojo: .net, no .com. El .com se queda intacto en Netlify.
+# Ojo: .org, no .com. El .com se queda intacto en Netlify.
 MEDIA_BASE = "https://fotos.deborahyaimar.org"
 # Cuenta de Cloudflare, para construir el endpoint S3 de R2.
 R2_ACCOUNT_ID = "a4c656f422cf48ffa8f3a734bf518b38"

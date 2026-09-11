@@ -278,6 +278,48 @@ console.log('\n10) Las pestañas salen de las categorías reales');
   await p3.close();
 }
 
+// ── 11. Presupuesto de peticiones (el límite gratuito del Worker) ─────
+console.log('\n11) Cuántas peticiones hace un invitado mirando la galería');
+{
+  const p4 = await ctx.newPage();
+  await p4.clock.install();
+  const peticiones = [];
+  await p4.route('**/categorias.json*', (r) => { peticiones.push('cat'); return r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }); });
+  await p4.route('**/indice.json*', (r) => {
+    peticiones.push(r.request().url().includes('oficial') ? 'ofi' : 'inv');
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' });
+  });
+  await p4.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  peticiones.length = 0;
+
+  // 10 minutos mirando la pantalla
+  for (let i = 0; i < 20; i++) { await p4.clock.runFor(30_000); await p4.waitForTimeout(40); }
+  const porHora = Math.round(peticiones.length * 6);
+  const ofi = peticiones.filter((x) => x === 'ofi').length;
+  porHora <= 150
+    ? ok(`${peticiones.length} peticiones en 10 min → ~${porHora}/hora (antes 480)`)
+    : mal(`demasiadas: ${peticiones.length} en 10 min (~${porHora}/hora)`);
+  ofi <= 3 ? ok(`el índice del reportaje solo ${ofi} veces en 10 min`) : mal(`reportaje ${ofi} veces`);
+
+  // 10 minutos con la pestaña oculta
+  await p4.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  peticiones.length = 0;
+  for (let i = 0; i < 20; i++) { await p4.clock.runFor(30_000); await p4.waitForTimeout(40); }
+  peticiones.length === 0 ? ok('con la pestaña oculta no pregunta nada') : mal(`oculta hizo ${peticiones.length}`);
+
+  // Al volver, se pone al día al momento
+  await p4.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await p4.waitForTimeout(400);
+  peticiones.includes('inv') ? ok('al volver a la pestaña se actualiza sin esperar') : mal('no se actualizó al volver');
+  await p4.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(50)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Todo correcto');

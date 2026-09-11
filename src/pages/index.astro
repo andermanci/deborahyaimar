@@ -5,7 +5,7 @@
 <head>
   <meta charset="utf-8" />
   <link rel="icon" href="/logo-positivo.png" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="description" content="Aimar & Deborah — 12 · 09 · 2026 · Palacio de Murguia, Astigarraga" />
   <title>Aimar & Deborah · 12 · 09 · 2026</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -33,6 +33,13 @@
       <h1 class="hero-names">Aimar <span class="amp">&</span> Deborah</h1>
       <p class="hero-date">12 · 09 · 2026</p>
       <p class="hero-venue">Palacio de Murguia, Astigarraga</p>
+      <!-- Lo que viene a hacer casi todo el que abre la web el día de la boda:
+           tiene que estar en la primera pantalla, no al final del todo. -->
+      <a href="/galeria" class="subir-btn hero-cta" id="heroCta">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.2"/></svg>
+        Sube tus fotos
+      </a>
+      <p class="hero-cta-nota">Fotos y vídeos</p>
     </div>
     <div class="hero-scroll"><span class="scroll-line"></span></div>
   </section>
@@ -167,10 +174,18 @@
       <p class="fp-eyebrow">Galería</p>
       <h2 class="fp-title">Las fotos del día</h2>
       <div class="fp-deco"></div>
-      <p class="fp-text">Después de la boda encontraréis aquí todos los recuerdos del día.<br/>Y podréis subir las vuestras también.</p>
-      <a href="/galeria" class="fp-btn">Ver galería →</a>
+      <p class="fp-text">Todos los recuerdos del día, en un solo sitio.<br/>Sube tus fotos y vídeos y mira los de los demás.</p>
+      <a href="/galeria" class="fp-btn">Abrir la galería →</a>
     </div>
   </section>
+
+  <!-- Aparece en cuanto el botón de la portada sale de pantalla, para que subir
+       fotos esté siempre a un toque. Se aparta cuando ya se ve la sección de
+       fotos (nunca dos botones iguales a la vista) y mientras se escribe. -->
+  <a href="/galeria" class="subir-btn subir-flotante" id="subirFlotante">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z"/><circle cx="12" cy="13" r="3.2"/></svg>
+    Sube tus fotos
+  </a>
 
   <footer>
     <p>Aimar & Deborah · 12 · 09 · 2026</p>
@@ -293,6 +308,29 @@
   disc.addEventListener('mouseleave', resumeSpin);
   disc.addEventListener('touchstart', snapStraight, { passive: true });
   disc.addEventListener('touchend',   resumeSpin,   { passive: true });
+
+  // ── BOTÓN FLOTANTE DE FOTOS ───────────────────────────────────
+  const flotante = document.getElementById('subirFlotante') as HTMLElement;
+  const alVista = new Set<Element>();
+  let escribiendo = false;
+
+  const sincronizarFlotante = () =>
+    flotante.classList.toggle('visible', alVista.size === 0 && !escribiendo);
+
+  // Fuera de la vista mientras se vea el botón de la portada, la sección de
+  // fotos o el pie: ahí ya hay un botón igual, o no queda nada más abajo.
+  const observador = new IntersectionObserver((entradas) => {
+    for (const e of entradas) e.isIntersecting ? alVista.add(e.target) : alVista.delete(e.target);
+    sincronizarFlotante();
+  });
+  ['#heroCta', '.fotos-preview', 'footer'].forEach((sel) => {
+    const el = document.querySelector(sel);
+    if (el) observador.observe(el);
+  });
+
+  // En el móvil, con el teclado abierto, un botón fijo abajo tapa el formulario.
+  form.addEventListener('focusin',  () => { escribiendo = true;  sincronizarFlotante(); });
+  form.addEventListener('focusout', () => { escribiendo = false; sincronizarFlotante(); });
 </script>
 
 </body>
@@ -397,6 +435,51 @@
   .hero-venue {
     font-size: 0.75rem; letter-spacing: 0.18em;
     text-transform: uppercase; opacity: 0.7; font-weight: 200;
+  }
+
+  /* BOTÓN DE SUBIR FOTOS (portada y flotante comparten aspecto) */
+  .subir-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.6rem;
+    font-family: inherit; font-size: 0.74rem; font-weight: 500;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--black); background: var(--pink);
+    border-radius: 100px; padding: 1rem 1.9rem;
+    text-decoration: none; white-space: nowrap;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.14);
+    transition: transform 0.2s cubic-bezier(0.2,0.8,0.2,1), background 0.2s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .subir-btn svg { width: 18px; height: 18px; flex: none; }
+  .subir-btn:hover { background: #f6c3d9; }
+  .subir-btn:active { transform: scale(0.96); }
+  .subir-btn:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+
+  .hero-cta { margin-top: 5.5rem; }
+
+  .hero-cta-nota {
+    margin-top: 0.9rem;
+    font-size: 0.64rem; letter-spacing: 0.14em; font-weight: 300;
+    opacity: 0.7;
+  }
+
+  .subir-flotante {
+    position: fixed; z-index: 90; left: 50%;
+    bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+    transform: translate(-50%, 140%);
+    opacity: 0; visibility: hidden;
+    transition: transform 0.4s cubic-bezier(0.2,0.8,0.2,1), opacity 0.3s, visibility 0s 0.4s, background 0.2s;
+  }
+  .subir-flotante.visible {
+    transform: translate(-50%, 0);
+    opacity: 1; visibility: visible;
+    transition: transform 0.4s cubic-bezier(0.2,0.8,0.2,1), opacity 0.3s, visibility 0s, background 0.2s;
+  }
+  .subir-flotante.visible:active { transform: translate(-50%, 0) scale(0.96); }
+  .subir-flotante:focus-visible { outline-color: var(--pink-deep); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .subir-flotante, .subir-flotante.visible { transition: opacity 0.2s, visibility 0s; }
+    .subir-flotante { transform: translate(-50%, 0); }
   }
 
   .hero-scroll {
