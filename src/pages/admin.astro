@@ -972,7 +972,7 @@
   cola.alCambiar((r) => {
     if (!r.total) { $('progresoSubida').hidden = true; return; }
     $('progresoSubida').hidden = false;
-    $('progresoBar').style.width = `${Math.round((r.hechos / r.total) * 100)}%`;
+    $('progresoBar').style.width = `${Math.round(r.fraccion * 100)}%`;
     if (r.hechos === r.total && !r.fallidos) {
       $('progresoTxt').textContent = `Listo: ${r.hechos} al reportaje`;
       $('soltarCuenta').textContent = '';

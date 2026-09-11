@@ -926,7 +926,10 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       progreso.hidden = false;
       subiendo = true;
       sincronizarFab();
-      $('progresoBarra').style.width = `${Math.round((r.hechos / r.total) * 100)}%`;
+      // La barra avanza con los bytes, no solo al terminar cada foto: con
+      // cobertura mala, una foto puede tardar medio minuto y antes la barra
+      // no se movía en todo ese rato.
+      $('progresoBarra').style.width = `${Math.round(r.fraccion * 100)}%`;
 
       const texto = $('progresoTexto');
       const accion = $('progresoAccion') as HTMLButtonElement;
@@ -957,7 +960,8 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       } else if (r.reintentando) {
         texto.textContent = `Reintentando… · ${cuantas}`;
       } else if (r.subiendo) {
-        texto.textContent = `Subiendo… ${cuantas}`;
+        const pct = r.progresoActual !== undefined ? ` · foto ${r.hechos + 1}: ${Math.round(r.progresoActual * 100)} %` : '';
+        texto.textContent = `Subiendo… ${cuantas}${pct}`;
       } else if (r.pendientes) {
         texto.textContent = `En cola · ${cuantas}`;
       } else {
@@ -969,12 +973,16 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 
       // Decir POR QUÉ, aunque todavía esté reintentando: no es lo mismo
       // quedarse sin cobertura que subir algo que el servidor rechaza.
+      const quedan = r.hechos < r.total;
       const razon = r.sinConexion
-        ? 'Esperando cobertura. Se reanuda sola en cuanto vuelva; puedes cerrar la página.'
-        : r.ultimoError;
+        ? (r.persistente
+            ? 'Esperando cobertura. Se reanuda sola en cuanto vuelva; puedes cerrar la página.'
+            : 'Esperando cobertura. Se reanuda sola en cuanto vuelva: no cierres esta página.')
+        : r.ultimoError
+          ?? (!r.persistente && quedan ? 'No cierres esta página hasta que termine.' : undefined);
       if (razon) {
         motivo.hidden = false;
-        motivo.textContent = /fetch|network|Failed|NetworkError|tiempo de espera/i.test(razon)
+        motivo.textContent = /fetch|network|Failed|NetworkError|tiempo de espera|parada/i.test(razon)
           ? 'Parece que no hay conexión. Se reintentará solo al volver la cobertura.'
           : razon;
       } else {

@@ -17,7 +17,12 @@ import type { MedioProcesado } from './media';
 const DB_NOMBRE = 'ad-galeria';
 const DB_VERSION = 1;
 const ALMACEN = 'cola';
-const CONCURRENCIA = 3;
+// De UNA en una. Con tres a la vez, en un 4G saturado las tres se repartían el
+// poco ancho de banda, ninguna terminaba a tiempo, se cortaban juntas y volvían
+// a empezar desde cero: la barra se quedaba en «0 de 7» indefinidamente. En
+// una conexión limitada por ancho de banda, subir en serie tarda lo mismo en
+// total y cada foto llega en cuanto termina.
+const CONCURRENCIA = 1;
 const MAX_INTENTOS = 6;
 
 // fetch NO tiene tiempo de espera por defecto. En un móvil que pierde
@@ -25,8 +30,11 @@ const MAX_INTENTOS = 6;
 // queda colgada y ya no la despierta ni volver la conexión. Todo lo que sale a
 // la red lleva plazo.
 const PLAZO_API = 20_000;      // firmar / completar: son peticiones pequeñas
-const PLAZO_FOTO = 150_000;    // hasta ~2 MB (foto de noche) con cobertura mala
-const PLAZO_PARTE = 180_000;   // trozo de vídeo de 5 MB
+// Las subidas de bytes no tienen plazo TOTAL, sino de INACTIVIDAD: mientras
+// sigan saliendo bytes, da igual que tarden dos minutos. Solo se cortan si
+// pasan 45 s sin avanzar nada. Un plazo total cortaba justo las subidas lentas
+// pero sanas, que es lo que más hay en una boda.
+const PLAZO_ATASCO = 45_000;
 
 // Red de seguridad para elementos abandonados por una pestaña que murió. Es
 // deliberadamente generoso porque un vídeo grande tarda de verdad: 20 partes
@@ -87,7 +95,10 @@ export interface ResumenCola {
   fallidos: number;
   pendientes: number;
   reintentando: number;   // pendientes que ya fallaron alguna vez
+  fraccion: number;       // 0–1 del total, contando los bytes de lo que sube ahora
+  progresoActual?: number; // 0–1 de la foto que está subiendo en este momento
   sinConexion: boolean;   // la cola está parada esperando cobertura
+  persistente: boolean;   // false = en memoria: cerrar la pestaña pierde lo pendiente
   ultimoError?: string;   // motivo del último fallo, aunque aún esté reintentando
   items: ItemCola[];
 }
@@ -118,9 +129,42 @@ async function tx<T>(modo: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   });
 }
 
-const guardar = (item: ItemCola) => tx('readwrite', (s) => s.put(item));
-const borrar = (id: string) => tx('readwrite', (s) => s.delete(id));
-const leerTodo = () => tx<ItemCola[]>('readonly', (s) => s.getAll());
+// ── Almacén con plan B en memoria ─────────────────────────────────────
+// Safari en navegación privada (y algunos navegadores integrados en apps) NO
+// deja guardar archivos en IndexedDB: «Error preparing Blob/File data to be
+// stored in object store». Sin plan B, la foto no llegaba ni a encolarse y el
+// invitado se quedaba en «Preparando la foto…» para siempre. Si IndexedDB
+// falla, la cola sigue en memoria: sube igual, pero no sobrevive a cerrar la
+// pestaña (y así se le dice al invitado).
+let memoria: Map<string, ItemCola> | null = null;
+export const colaPersistente = () => memoria === null;
+
+function pasarAMemoria(err: unknown) {
+  if (memoria) return;
+  console.warn('IndexedDB no disponible, la cola sigue en memoria:', err);
+  memoria = new Map();
+}
+
+async function guardar(item: ItemCola): Promise<void> {
+  if (!memoria) {
+    try { await tx('readwrite', (s) => s.put(item)); return; } catch (e) { pasarAMemoria(e); }
+  }
+  memoria!.set(item.id, item);
+}
+
+async function borrar(id: string): Promise<void> {
+  if (!memoria) {
+    try { await tx('readwrite', (s) => s.delete(id)); return; } catch (e) { pasarAMemoria(e); }
+  }
+  memoria!.delete(id);
+}
+
+async function leerTodo(): Promise<ItemCola[]> {
+  if (!memoria) {
+    try { return await tx<ItemCola[]>('readonly', (s) => s.getAll()); } catch (e) { pasarAMemoria(e); }
+  }
+  return [...memoria!.values()];
+}
 
 // ── Utilidades ────────────────────────────────────────────────────────
 
@@ -128,6 +172,50 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Se lanza cuando el usuario para la subida a propósito. */
 export class Cancelado extends Error {}
+
+/**
+ * PUT con progreso real y plazo por inactividad.
+ * Va con XMLHttpRequest porque fetch no informa de cuántos bytes han salido.
+ */
+function subirConProgreso(
+  url: string,
+  cuerpo: Blob,
+  contentType: string | undefined,
+  senal: AbortSignal | undefined,
+  alProgreso: (enviados: number) => void,
+): Promise<{ status: number; etag: string | null }> {
+  return new Promise((resolver, rechazar) => {
+    const xhr = new XMLHttpRequest();
+    let terminado = false;
+    let ultimoAvance = Date.now();
+    const acabar = (fn: () => void) => {
+      if (terminado) return;
+      terminado = true;
+      clearInterval(vigilante);
+      senal?.removeEventListener('abort', alCancelar);
+      fn();
+    };
+    const vigilante = setInterval(() => {
+      if (Date.now() - ultimoAvance > PLAZO_ATASCO) {
+        acabar(() => rechazar(new Error('La subida se ha quedado parada. ¿Hay cobertura?')));
+        xhr.abort();
+      }
+    }, 3000);
+    const alCancelar = () => {
+      acabar(() => rechazar(new Cancelado('Subida cancelada')));
+      xhr.abort();
+    };
+    if (senal?.aborted) { alCancelar(); return; }
+    senal?.addEventListener('abort', alCancelar, { once: true });
+
+    xhr.open('PUT', url);
+    if (contentType) xhr.setRequestHeader('Content-Type', contentType);
+    xhr.upload.onprogress = (e) => { ultimoAvance = Date.now(); alProgreso(e.loaded); };
+    xhr.onload = () => acabar(() => resolver({ status: xhr.status, etag: xhr.getResponseHeader('ETag') }));
+    xhr.onerror = () => acabar(() => rechazar(new Error('Fallo de red al subir')));
+    xhr.send(cuerpo);
+  });
+}
 
 /**
  * fetch con plazo y con cancelación.
@@ -170,6 +258,9 @@ export class ColaSubida {
   /** Para cortar en seco lo que ya está en vuelo cuando el usuario cancela. */
   private abortadores = new Map<string, AbortController>();
   private cancelando = false;
+  /** Bytes enviados de cada elemento en curso, de 0 a 1. */
+  private progreso = new Map<string, number>();
+  private avisoProgresoPendiente = false;
   private oyentes: ((r: ResumenCola) => void)[] = [];
 
   constructor(apiBase: string) {
@@ -235,6 +326,13 @@ export class ColaSubida {
     this.oyentes.push(fn);
   }
 
+  /** Avisa del progreso sin saturar: como mucho unas tres veces por segundo. */
+  private avisarProgreso() {
+    if (this.avisoProgresoPendiente) return;
+    this.avisoProgresoPendiente = true;
+    setTimeout(() => { this.avisoProgresoPendiente = false; void this.avisar(); }, 300);
+  }
+
   private async avisar() {
     const items = await leerTodo();
     const resumen: ResumenCola = {
@@ -244,7 +342,14 @@ export class ColaSubida {
       fallidos: items.filter((i) => i.estado === 'fallido').length,
       pendientes: items.filter((i) => i.estado === 'pendiente').length,
       reintentando: items.filter((i) => i.estado === 'pendiente' && i.intentos > 0).length,
+      fraccion: items.length
+        ? (items.filter((i) => i.estado === 'hecho').length
+           + items.filter((i) => i.estado === 'subiendo')
+               .reduce((acc, i) => acc + (this.progreso.get(i.id) ?? 0), 0)) / items.length
+        : 0,
+      progresoActual: [...this.progreso.values()][0],
       sinConexion: !navigator.onLine && items.some((i) => i.estado !== 'hecho'),
+      persistente: colaPersistente(),
       ultimoError: items.find((i) => i.error && i.estado !== 'hecho')?.error,
       items,
     };
@@ -361,7 +466,13 @@ export class ColaSubida {
   }
 
   private async subirItem(item: ItemCola): Promise<void> {
-    await guardar({ ...item, estado: 'subiendo', marcadoEn: Date.now() });
+    // Se marca el PROPIO objeto, no una copia: firmar() y las partes de vídeo
+    // vuelven a guardar `item`, y con una copia devolvían el estado a
+    // «pendiente». La interfaz decía «En cola» mientras subía y la barra no
+    // contaba los bytes en curso.
+    item.estado = 'subiendo';
+    item.marcadoEn = Date.now();
+    await guardar(item);
     this.trabajando.add(item.id);
     const ctrl = new AbortController();
     this.abortadores.set(item.id, ctrl);
@@ -395,6 +506,7 @@ export class ColaSubida {
     } finally {
       this.trabajando.delete(item.id);
       this.abortadores.delete(item.id);
+      this.progreso.delete(item.id);
     }
   }
 
@@ -433,20 +545,25 @@ export class ColaSubida {
     const subidas = item.subidas;
     if (!subidas?.length) throw new Error('Falta la firma de subida');
 
+    const total = Object.values(item.blobs).reduce((a, b) => a + b.size, 0) || 1;
+    let base = 0;
+    const informar = (enviados: number) => {
+      this.progreso.set(item.id, Math.min(1, (base + enviados) / total));
+      this.avisarProgreso();
+    };
+
     for (const s of subidas) {
       const blob = item.blobs[s.rol];
       if (!blob) continue;
 
       if (s.rol === 'video') {
-        await this.subirVideoPorPartes(item, s, blob, senal);
+        await this.subirVideoPorPartes(item, s, blob, senal, (enviadosVideo) => informar(enviadosVideo));
       } else {
-        const res = await fetchConPlazo(s.url!, {
-          method: 'PUT',
-          body: blob,
-          headers: { 'Content-Type': blob.type || 'image/webp' },
-        }, PLAZO_FOTO, senal);
-        if (!res.ok) throw new Error(`Fallo al subir ${s.rol} (${res.status})`);
+        const res = await subirConProgreso(s.url!, blob, blob.type || 'image/webp', senal, informar);
+        if (res.status < 200 || res.status >= 300) throw new Error(`Fallo al subir ${s.rol} (${res.status})`);
       }
+      base += blob.size;
+      informar(0);
     }
   }
 
@@ -456,6 +573,7 @@ export class ColaSubida {
    */
   private async subirVideoPorPartes(
     item: ItemCola, s: SubidaFirmada, blob: Blob, senal?: AbortSignal,
+    alProgreso: (enviados: number) => void = () => {},
   ): Promise<void> {
     const urls = s.urls ?? [];
     const partSize = s.partSize ?? 0;
@@ -468,13 +586,14 @@ export class ColaSubida {
 
       const desde = (n - 1) * partSize;
       const trozo = blob.slice(desde, Math.min(desde + partSize, blob.size));
+      const yaSubido = [...hechas.keys()].reduce((a, k) => a + Math.min(partSize, blob.size - (k - 1) * partSize), 0);
 
-      const res = await fetchConPlazo(urls[n - 1]!, { method: 'PUT', body: trozo }, PLAZO_PARTE, senal);
-      if (!res.ok) throw new Error(`Fallo al subir la parte ${n} del vídeo (${res.status})`);
+      const res = await subirConProgreso(urls[n - 1]!, trozo, undefined, senal, (e) => alProgreso(yaSubido + e));
+      if (res.status < 200 || res.status >= 300) throw new Error(`Fallo al subir la parte ${n} del vídeo (${res.status})`);
 
       // R2 debe exponer ETag por CORS o esto viene vacío y no se puede cerrar
-      // el multipart. Ver docs/cloudflare-setup.md.
-      const etag = res.headers.get('ETag');
+      // el multipart. Ver docs/puesta-en-marcha.md.
+      const etag = res.etag;
       if (!etag) throw new Error('R2 no devolvió ETag: revisa la política CORS del bucket');
 
       hechas.set(n, etag);

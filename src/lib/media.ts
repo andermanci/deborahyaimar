@@ -7,18 +7,26 @@
  * el almacenamiento entra en el tier gratuito de R2.
  */
 
-// 3072 px @ 85 %: unos 26 cm a 300 ppp, o 20×30 cm a ~260 ppp. Medido con fotos
-// reales de 13,7 MP: ~650 KB una foto normal (antes, a 2560 @ 82 %, ~450 KB).
-// Las de noche con grano llegan a ~2,2 MB; el servidor admite hasta 6 MB.
-export const MAX_WEB = 3072;
+// La calidad depende del formato que sepa generar el navegador.
+//
+// Safari (todos los iPhone) NO sabe codificar WebP desde un canvas y cae a
+// JPEG, que para la misma foto pesa ~3 veces más. Medido con una foto real de
+// 13,7 MP en el motor de Safari 26.5: JPEG 3072 @ 85 % = 1,6 MB; en fotos de
+// móvil reales, 1,7–2,3 MB. Con eso las subidas se atascaban en la boda.
+//
+// WebP (Android / Chrome): 3072 px @ 85 % → ~650 KB, 20×30 cm a ~260 ppp.
+// JPEG (iPhone):           2560 px @ 80 % → ~1 MB,   20×30 cm a ~215 ppp.
 export const MAX_THUMB = 600;
-export const CALIDAD_WEB = 0.85;
 export const CALIDAD_THUMB = 0.75;
+const AJUSTE = {
+  'image/webp': { max: 3072, calidad: 0.85 },
+  'image/jpeg': { max: 2560, calidad: 0.80 },
+} as const;
 
 // Si pese a todo una foto sale demasiado grande (grano extremo, formato raro),
 // se recomprime más fuerte antes de subirla: ninguna foto debe fallar por peso.
 const TOPE_WEB = 3.5 * 1024 * 1024;
-const REINTENTOS_PESO: [number, number][] = [[3072, 0.75], [2560, 0.72], [2048, 0.7]];
+const REINTENTOS_PESO: [number, number][] = [[2560, 0.72], [2048, 0.7], [1600, 0.68]];
 
 /** Tope duro de duración. La UI anuncia 15 s; aceptamos hasta 20 con margen. */
 export const MAX_SEGUNDOS = 20;
@@ -95,10 +103,11 @@ export async function procesarFoto(archivo: File): Promise<FotoProcesada> {
 
   try {
     const mime = await formatoSalida();
-    const dimWeb = escalar(bitmap.width, bitmap.height, MAX_WEB);
+    const { max, calidad } = AJUSTE[mime];
+    const dimWeb = escalar(bitmap.width, bitmap.height, max);
     const dimThumb = escalar(bitmap.width, bitmap.height, MAX_THUMB);
 
-    let web = await aBlob(pintar(bitmap, dimWeb.ancho, dimWeb.alto), mime, CALIDAD_WEB);
+    let web = await aBlob(pintar(bitmap, dimWeb.ancho, dimWeb.alto), mime, calidad);
     let dimFinal = dimWeb;
     for (const [max, q] of REINTENTOS_PESO) {
       if (web.size <= TOPE_WEB) break;
@@ -155,10 +164,11 @@ export async function procesarVideo(archivo: File): Promise<VideoProcesado> {
     if (!ancho || !alto) throw new ErrorMedio('El vídeo no tiene imagen legible.');
 
     const mime = await formatoSalida();
-    const dimPoster = escalar(ancho, alto, MAX_WEB);
+    const { max, calidad } = AJUSTE[mime];
+    const dimPoster = escalar(ancho, alto, max);
     const dimThumb = escalar(ancho, alto, MAX_THUMB);
 
-    const poster = await aBlob(pintar(video, dimPoster.ancho, dimPoster.alto), mime, CALIDAD_WEB);
+    const poster = await aBlob(pintar(video, dimPoster.ancho, dimPoster.alto), mime, calidad);
     const thumb = await aBlob(pintar(video, dimThumb.ancho, dimThumb.alto), mime, CALIDAD_THUMB);
 
     return {

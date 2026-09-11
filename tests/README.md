@@ -13,6 +13,10 @@ npm test
 - `video.spec.mjs` — multipart de vídeo y **reanudación** (que no reenvíe partes ya subidas).
 - `panel.spec.mjs` — panel de los novios: acceso, papelera, borrado definitivo,
   filtros, resumen, subida del reportaje y descarga en ZIP.
+- `safari.spec.mjs` — el flujo completo en el motor de Safari (WebKit). Detecta que
+  Safari sube JPEG y el fallo de IndexedDB en navegación privada.
+- `lento.spec.mjs` — subida limitada a 300 kbps con un receptor HTTP real (los bytes
+  salen de verdad). Vigila que no haya reenvíos y que la barra avance.
 - `produccion.spec.mjs` — humo contra el sitio **real** (deborahyaimar.com + R2 + Worker).
   No usa mocks: sube una foto de verdad. Ejecutar antes de la boda, y borrar
   después la foto de prueba (nombre «Ensayo Claude») desde el panel de moderación.

@@ -10,7 +10,7 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "test": "node tests/galeria.spec.mjs && node tests/resiliencia.spec.mjs && node tests/video.spec.mjs && node tests/mural.spec.mjs && node tests/panel.spec.mjs"
+    "test": "node tests/galeria.spec.mjs && node tests/resiliencia.spec.mjs && node tests/video.spec.mjs && node tests/mural.spec.mjs && node tests/panel.spec.mjs && node tests/safari.spec.mjs && node tests/lento.spec.mjs"
   },
   "dependencies": {
     "astro": "^6.1.4",
