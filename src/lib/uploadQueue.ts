@@ -174,6 +174,32 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export class Cancelado extends Error {}
 
 /**
+ * Error de red: cobertura que se cae, conexión cortada, subida parada.
+ * NO cuenta para rendirse. En una boda, un minuto sin cobertura es lo normal:
+ * antes, tras 6 fallos seguidos (~1 min) la foto se daba por perdida y la cola
+ * dejaba de intentarlo, y el invitado veía que «solo ha subido una».
+ */
+export class ErrorRed extends Error {}
+
+/** La foto guardada en el móvil ya no se puede leer (fallo conocido de Safari). */
+export class DatosPerdidos extends Error {}
+
+// Diagnóstico: el móvil cuenta al servidor qué falló, para poder verlo en
+// directo con `wrangler tail`. Como mucho un aviso cada 10 s.
+let apiDiag = '';
+let ultimoDiag = 0;
+function diagnosticar(datos: Record<string, unknown>) {
+  if (!apiDiag || Date.now() - ultimoDiag < 10_000) return;
+  ultimoDiag = Date.now();
+  try {
+    navigator.sendBeacon?.(`${apiDiag}/diag`, JSON.stringify({
+      ...datos, ua: navigator.userAgent, oculta: document.visibilityState !== 'visible',
+      online: navigator.onLine, t: new Date().toISOString(),
+    }));
+  } catch { /* el diagnóstico nunca puede romper la subida */ }
+}
+
+/**
  * PUT con progreso real y plazo por inactividad.
  * Va con XMLHttpRequest porque fetch no informa de cuántos bytes han salido.
  */
@@ -188,6 +214,7 @@ function subirConProgreso(
     const xhr = new XMLHttpRequest();
     let terminado = false;
     let ultimoAvance = Date.now();
+    let enviados = 0;
     const acabar = (fn: () => void) => {
       if (terminado) return;
       terminado = true;
@@ -197,7 +224,8 @@ function subirConProgreso(
     };
     const vigilante = setInterval(() => {
       if (Date.now() - ultimoAvance > PLAZO_ATASCO) {
-        acabar(() => rechazar(new Error('La subida se ha quedado parada. ¿Hay cobertura?')));
+        diagnosticar({ tipo: 'atasco', enviados, total: cuerpo.size });
+        acabar(() => rechazar(new ErrorRed('La subida se ha quedado parada. ¿Hay cobertura?')));
         xhr.abort();
       }
     }, 3000);
@@ -210,9 +238,12 @@ function subirConProgreso(
 
     xhr.open('PUT', url);
     if (contentType) xhr.setRequestHeader('Content-Type', contentType);
-    xhr.upload.onprogress = (e) => { ultimoAvance = Date.now(); alProgreso(e.loaded); };
+    xhr.upload.onprogress = (e) => { ultimoAvance = Date.now(); enviados = e.loaded; alProgreso(e.loaded); };
     xhr.onload = () => acabar(() => resolver({ status: xhr.status, etag: xhr.getResponseHeader('ETag') }));
-    xhr.onerror = () => acabar(() => rechazar(new Error('Fallo de red al subir')));
+    xhr.onerror = () => {
+      diagnosticar({ tipo: 'error-red', enviados, total: cuerpo.size, status: xhr.status, readyState: xhr.readyState });
+      acabar(() => rechazar(new ErrorRed('Conexión inestable')));
+    };
     xhr.send(cuerpo);
   });
 }
@@ -233,8 +264,8 @@ async function fetchConPlazo(
     return await fetch(url, { ...opciones, signal: ctrl.signal });
   } catch (err) {
     if (externa?.aborted) throw new Cancelado('Subida cancelada');
-    if (ctrl.signal.aborted) throw new Error('Se agotó el tiempo de espera. ¿Hay cobertura?');
-    throw err;
+    if (ctrl.signal.aborted) throw new ErrorRed('Se agotó el tiempo de espera. ¿Hay cobertura?');
+    throw new ErrorRed(`Sin conexión (${err instanceof Error ? err.message : err})`);
   } finally {
     clearTimeout(reloj);
     externa?.removeEventListener('abort', cortar);
@@ -265,6 +296,7 @@ export class ColaSubida {
 
   constructor(apiBase: string) {
     this.api = apiBase.replace(/\/$/, '');
+    apiDiag = this.api;
 
     // Reanudar en cuanto vuelva la conexión o el usuario vuelva a la pestaña:
     // en iOS la pestaña se congela al bloquear el móvil.
@@ -479,6 +511,13 @@ export class ColaSubida {
     await this.avisar();
 
     try {
+      // Safari a veces pierde los archivos guardados en IndexedDB: el blob
+      // existe pero no se puede leer, y cada intento falla como «error de red».
+      // Mejor detectarlo y decirlo que reintentar para siempre.
+      for (const blob of Object.values(item.blobs)) {
+        try { await blob.slice(0, 16).arrayBuffer(); }
+        catch { throw new DatosPerdidos('Esta foto ya no está disponible en el móvil. Vuelve a elegirla.'); }
+      }
       if (!item.servidorId) await this.firmar(item, ctrl.signal);
       await this.subirBlobs(item, ctrl.signal);
       await this.completar(item, ctrl.signal);
@@ -490,10 +529,21 @@ export class ColaSubida {
       // cancelarTodo() ya se ha llevado el elemento.
       if (this.cancelando || err instanceof Cancelado) return;
 
-      const intentos = item.intentos + 1;
       const mensaje = err instanceof Error ? err.message : String(err);
+      const esRed = err instanceof ErrorRed || (err instanceof TypeError);
+      if (!esRed) diagnosticar({ tipo: 'error', mensaje });
 
-      if (intentos >= MAX_INTENTOS) {
+      // Datos perdidos: no tiene arreglo, se dice ya.
+      if (err instanceof DatosPerdidos) {
+        await guardar({ ...item, estado: 'fallido', intentos: MAX_INTENTOS, error: mensaje });
+        return;
+      }
+
+      // Los de red se reintentan siempre; solo los demás cuentan para rendirse.
+      const intentos = item.intentos + 1;
+      const rendirse = !esRed && intentos >= MAX_INTENTOS;
+
+      if (rendirse) {
         await guardar({ ...item, estado: 'fallido', intentos, error: mensaje });
       } else {
         // Sin await aquí: si esperásemos dentro del lote, una foto que falla

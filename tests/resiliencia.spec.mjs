@@ -290,6 +290,43 @@ console.log('\nG) Sin cobertura, el estado tiene que ser honesto');
   await ctx.close();
 }
 
+// ══ H. Cobertura muy mala: muchos cortes seguidos no deben rendirse ═══
+console.log('\nH) Diez cortes de red seguidos y luego vuelve la cobertura');
+{
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 } });
+  const page = await nuevaPagina(ctx);
+  let cortes = 0;
+  await page.route('**/firmar', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ id: 'r', subidas: [
+      { rol: 'thumb', key: 'invitados/r/thumb.webp', url: `${BASE}/__put/t` },
+      { rol: 'web',   key: 'invitados/r/web.webp',   url: `${BASE}/__put/w` }]}) }));
+  await page.route('**/__put/**', (r) => {
+    if (cortes < 10) { cortes++; return r.abort('connectionreset'); }   // la red se corta
+    return r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' });
+  });
+  await page.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+  await page.route('**/diag', (r) => r.fulfill({ status: 204, body: '' }));
+
+  await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await page.setInputFiles('#selector', { name: 'x.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await rellenarNombre(page, 'Ander');
+
+  let llego = false, vioFallida = false, motivo = '';
+  for (let i = 0; i < 80 && !llego; i++) {
+    await page.clock.runFor(15_000);
+    await page.waitForTimeout(120);
+    const txt = (await page.locator('#progresoTexto').textContent()) ?? '';
+    if (txt.includes('fallida')) vioFallida = true;
+    if (!motivo) motivo = (await page.locator('#progresoMotivo').textContent()) ?? '';
+    llego = txt.includes('Gracias');
+  }
+  cortes === 10 ? ok('la red se cortó 10 veces seguidas') : mal(`cortes: ${cortes}`);
+  !vioFallida ? ok('no se rindió en ningún momento (antes, al sexto fallo)') : mal('llegó a marcarse como fallida');
+  llego ? ok('al volver la cobertura, la foto llega sola') : mal('no llegó');
+  motivo.includes('trompicones') ? ok('mientras tanto, un mensaje tranquilo en vez de «fallo de red»') : mal(`motivo: "${motivo}"`);
+  await ctx.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(52)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Resiliencia correcta');

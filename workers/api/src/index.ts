@@ -717,6 +717,13 @@ export default {
       if (pathname === '/firmar'      && req.method === 'POST') return await firmar(req, env);
       if (pathname === '/completar'   && req.method === 'POST') return await completar(req, env);
       if (pathname === '/borrar'      && req.method === 'POST') return await borrar(req, env);
+      // Diagnóstico de subidas que fallan en los móviles: solo se escribe en el
+      // log (visible con `wrangler tail`), no se guarda nada.
+      if (pathname === '/diag' && req.method === 'POST') {
+        const texto = (await req.text()).slice(0, 2000);
+        console.log('DIAG', texto);
+        return new Response(null, { status: 204, headers: cors(env) });
+      }
       if (pathname === '/categorias.json' && (req.method === 'GET' || req.method === 'HEAD')) {
         return await categorias(req, env, ctx);
       }
