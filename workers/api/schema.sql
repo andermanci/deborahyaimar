@@ -45,3 +45,9 @@ insert or ignore into categorias (slug, nombre, orden) values
   ('comida',    'Comida',    3),
   ('baile',     'Baile',     4),
   ('momentos',  'Momentos',  5);
+
+-- Índice por origen. Con el de arriba, pedir el reportaje (0 fotos durante la
+-- boda) recorría TODAS las fotos de invitados y las descartaba después: 1.500
+-- filas leídas para devolver ninguna, cada vez que caducaba la caché. El plan
+-- gratuito de D1 son 5 millones de filas leídas al día.
+create index if not exists media_origen_idx on media (origen, oculta, created_at desc);
