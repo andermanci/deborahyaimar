@@ -815,12 +815,11 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
           $('vacioTitulo').textContent = 'Sin conexión';
           $('vacioTexto').textContent = 'No hay manera de llegar a las fotos ahora mismo. En cuanto vuelva la conexión, aquí siguen todas.';
         } else {
-          $('vacioTitulo').textContent = 'Ni caso, es el fútbol';
+          $('vacioTitulo').textContent = 'Vuelve al pitido final';
           $('vacioTexto').textContent =
-            'Tus fotos están a salvo, pero tu operador no nos deja llegar a ellas. ' +
-            'Pasa en España cuando hay partido: bloquean direcciones de internet enteras para ' +
-            'perseguir las emisiones piratas y se llevan por delante lo que pillen. ' +
-            'Vuelve cuando acaben los partidos y estarán todas ahí.';
+            'Tus fotos están a salvo. Ahora mismo el fútbol nos ha dejado sin línea: ' +
+            'en España se bloquea internet a bulto durante los partidos y nos ha pillado ' +
+            'de rebote. No falta ninguna.';
         }
         // Nada de ofrecer subir: la subida sale por el mismo sitio que no
         // responde, así que solo serviría para dejar la foto esperando.

@@ -848,13 +848,19 @@ console.log('\n19) No se puede llegar al índice');
   // plazo a alguna, esto se pasaría de 14 s y fallaría.
   const t0 = Date.now();
   await pB.waitForFunction(
-    () => document.getElementById('vacioTitulo')?.textContent?.includes('fútbol'),
+    () => {
+      // Sin atarse a la redacción, que es lo único que se retoca: basta con que
+      // haya dejado de esperar y no haya caído en el mensaje de galería vacía.
+      const t = document.getElementById('vacioTitulo')?.textContent ?? '';
+      return t !== '' && t !== 'Un momento…' && t !== 'Empieza tú';
+    },
     { timeout: 14000 },
   ).then(() => ok(`al rendirse explica el bloqueo (${((Date.now() - t0) / 1000).toFixed(1)} s)`))
    .catch(() => mal('se quedó colgada en «Un momento…»: alguna petición no lleva plazo'));
 
   const texto = (await pB.locator('#vacioTexto').textContent()) ?? '';
   texto.includes('a salvo') ? ok('y tranquiliza: las fotos están a salvo') : mal(`texto: "${texto.slice(0, 60)}"`);
+  /partido|fútbol/i.test(texto) ? ok('y dice de qué va la cosa') : mal(`no explica la causa: "${texto.slice(0, 60)}"`);
   !texto.includes('Todavía no hay ninguna foto') ? ok('no dice que la galería esté vacía') : mal('sigue diciendo que no hay fotos');
 
   // Subir tampoco funcionaría: sale por el mismo sitio que no responde.
