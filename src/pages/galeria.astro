@@ -1482,7 +1482,9 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       for (const archivo of archivos) {
         try {
           const medio = await procesar(archivo, calidad);
-          await cola.encolar(medio, miNombre, deviceId);
+          // La elección viaja con la subida: en el panel hay que poder
+          // distinguir «eligió ligera» de «eligió original y no hubo copia».
+          await cola.encolar(medio, miNombre, deviceId, { calidad });
         } catch (err) {
           errores.push(err instanceof ErrorMedio ? err.message : `No se pudo leer «${archivo.name}».`);
         }

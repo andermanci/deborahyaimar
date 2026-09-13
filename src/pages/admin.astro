@@ -155,6 +155,25 @@
       letter-spacing: .04em; padding: .15rem .4rem; border-radius: 100px; line-height: 1.4;
     }
 
+    /* Arriba a la IZQUIERDA: arriba a la derecha ya vive .etiqueta (vídeo o
+       categoría) y se pisarían. */
+    .sello {
+      position: absolute; top: 6px; left: 6px;
+      font-size: .5rem; letter-spacing: .1em; text-transform: uppercase;
+      padding: .15rem .4rem; border-radius: 100px; line-height: 1.5;
+      color: #fff; background: rgba(15,8,10,.6);
+    }
+    .sello.original { background: rgba(183,110,121,.92); }
+    .sello.sin-copia { background: rgba(160,70,60,.92); }
+
+    .fila-cal { display: flex; align-items: center; gap: .6rem; margin-bottom: .5rem; font-size: .82rem; }
+    .fila-cal .nom { flex: 0 0 8.5rem; color: var(--dark); }
+    .fila-cal .bar { flex: 1; height: 8px; background: var(--blush); border-radius: 100px; overflow: hidden; }
+    .fila-cal .bar span { display: block; height: 100%; background: var(--pink-deep); border-radius: 100px; }
+    .fila-cal .bar.gris span { background: var(--gray); }
+    .fila-cal .bar.tenue span { background: var(--rose); }
+    .fila-cal .n { flex: 0 0 2.5rem; text-align: right; color: var(--gray); }
+
     .vacio-msg { text-align: center; color: var(--gray); font-size: .85rem; padding: var(--s7) var(--s5); }
 
     /* ── BARRA DE LOTE ───────────────────────────────────────────── */
@@ -339,6 +358,11 @@
         <div class="bloque">
           <h3>Cómo se repartió la noche</h3>
           <div class="horas" id="horas"></div>
+        </div>
+        <div class="bloque">
+          <h3>Calidad que eligieron</h3>
+          <div id="calidadFilas"></div>
+          <p class="medidor-txt" id="calidadNota" style="margin-top:.7rem"></p>
         </div>
         <div class="bloque">
           <h3>Espacio ocupado</h3>
@@ -650,6 +674,21 @@
       marca.textContent = seleccion.has(item.id) ? '✓' : '';
       b.appendChild(marca);
 
+      // Qué eligió quien la subió. Las de antes de que existiera la opción no
+      // llevan nada: no eligieron, les tocó.
+      if (item.calidad) {
+        const sello = document.createElement('span');
+        const conCopia = item.calidad === 'original' && item.original;
+        sello.className = `sello ${conCopia ? 'original' : item.calidad === 'original' ? 'sin-copia' : ''}`;
+        sello.textContent = conCopia ? 'Original' : item.calidad === 'original' ? 'Sin copia' : 'Ligera';
+        sello.title = conCopia
+          ? 'Eligió calidad original y la copia está guardada'
+          : item.calidad === 'original'
+            ? 'Eligió original, pero no hay copia: o la foto ya venía comprimida y no aportaba nada, o la subida no llegó'
+            : 'Eligió subirla más ligera: no hay copia original';
+        b.appendChild(sello);
+      }
+
       if (item.tipo === 'video' || item.categoria) {
         const et = document.createElement('span');
         et.className = 'etiqueta';
@@ -847,12 +886,52 @@
       }
       if (!s.porHora.length) horas.textContent = '';
 
+      // Tolerante con un Worker más viejo que esta página: durante un
+      // despliegue a medias, /admin/stats puede no traer todavía el reparto, y
+      // el resumen entero se caería por un `undefined`.
+      const cal = s.calidad ?? { original: 0, ligera: 0, sinOpcion: 0, conCopia: 0 };
+      const filasCal = $('calidadFilas');
+      filasCal.replaceChildren();
+      const totalCal = cal.original + cal.ligera + cal.sinOpcion;
+      const filas: [string, number, string][] = [
+        ['Original', cal.original, ''],
+        ['Más ligera', cal.ligera, 'gris'],
+        ['Antes de la opción', cal.sinOpcion, 'tenue'],
+      ];
+      for (const [nombre, n, clase] of filas) {
+        if (!n && nombre === 'Antes de la opción') continue;   // ya no aporta nada
+        const fila = document.createElement('div');
+        fila.className = 'fila-cal';
+        const nom = document.createElement('span'); nom.className = 'nom'; nom.textContent = nombre;
+        const bar = document.createElement('span'); bar.className = `bar ${clase}`;
+        const dentro = document.createElement('span');
+        dentro.style.width = `${totalCal ? (n / totalCal) * 100 : 0}%`;
+        bar.appendChild(dentro);
+        const num = document.createElement('span'); num.className = 'n'; num.textContent = String(n);
+        fila.append(nom, bar, num);
+        filasCal.appendChild(fila);
+      }
+      if (!totalCal) filasCal.textContent = 'Todavía no hay fotos de invitados.';
+
+      // Lo que de verdad hay que vigilar: los que eligieron original y se
+      // quedaron sin copia. Si son muchos, es que algo falla al subir.
+      const sinCopia = cal.original - cal.conCopia;
+      $('calidadNota').textContent = !cal.original
+        ? 'Nadie ha subido todavía en calidad original.'
+        : sinCopia === 0
+          ? `Las ${cal.original} que eligieron original tienen su copia guardada.`
+          : `${cal.conCopia} de ${cal.original} tienen copia. En ${sinCopia} no: o la foto ya venía comprimida y no aportaba nada, o la subida no llegó.`;
+
       const { bytes, limiteBytes, objetos } = s.almacenamiento;
+      const bytesOriginales = s.almacenamiento.bytesOriginales ?? 0;
       const pct = Math.min(100, (bytes / limiteBytes) * 100);
       $('medidorBar').style.width = `${pct}%`;
       const gb = (bytes / 1024 ** 3).toFixed(2);
       const txt = $('medidorTxt');
-      txt.textContent = `${gb} GB de 10 GB gratuitos · ${objetos} archivos (${pct.toFixed(1)} %)`;
+      const deOriginales = bytesOriginales
+        ? ` · ${(bytesOriginales / 1024 ** 3).toFixed(2)} GB son copias originales`
+        : '';
+      txt.textContent = `${gb} GB de 10 GB gratuitos · ${objetos} archivos (${pct.toFixed(1)} %)${deOriginales}`;
       txt.classList.toggle('aviso', pct > 80);
     }
   }

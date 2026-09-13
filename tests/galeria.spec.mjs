@@ -407,7 +407,11 @@ console.log('\n13) Subir en calidad original');
     }));
     await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'o', subidas }) });
   });
-  await p6.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+  let completado = null;
+  await p6.route('**/completar', (r) => {
+    completado = JSON.parse(r.request().postData());
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
   // Si esta ruta no existiera, la petición saldría al API DE VERDAD.
   await p6.route('**/original', async (r) => {
     originalRegistrado = JSON.parse(r.request().postData());
@@ -486,6 +490,12 @@ console.log('\n13) Subir en calidad original');
     ? ok('registra el original en el índice')
     : mal(`no registró el original: ${JSON.stringify(originalRegistrado)}`);
 
+  // La ELECCIÓN se registra aparte de si hay copia: el panel necesita poder
+  // distinguir «eligió ligera» de «eligió original y no hubo copia».
+  completado?.calidad === 'original'
+    ? ok('registra que eligió calidad original')
+    : mal(`no registró la elección: ${JSON.stringify(completado?.calidad)}`);
+
   // Y la galería lo ofrece.
   await p6.waitForSelector('.tarjeta', { timeout: 15000 });
   await p6.click('.tarjeta');
@@ -512,7 +522,11 @@ console.log('\n14) Subir en modo ligero');
     const subidas = firmado.archivos.map((a) => ({ rol: a.rol, key: `invitados/l/${a.rol}.webp`, url: `${BASE}/__put/${a.rol}` }));
     await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'l', subidas }) });
   });
-  await p7.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+  let completadoL = null;
+  await p7.route('**/completar', (r) => {
+    completadoL = JSON.parse(r.request().postData());
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
   await p7.route('**/original', (r) => { pidioOriginal = true; return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
   await p7.route('**/__put/**', (r) => r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' }));
 
@@ -546,6 +560,9 @@ console.log('\n14) Subir en modo ligero');
     ? ok('solo sube thumb y web: nada de original')
     : mal(`pidió firma para ${JSON.stringify(roles)}`);
   pidioOriginal ? mal('llamó a /original sin haberlo subido') : ok('no registra ningún original');
+  completadoL?.calidad === 'ligera'
+    ? ok('registra que eligió la ligera')
+    : mal(`no registró la elección: ${JSON.stringify(completadoL?.calidad)}`);
 
   // La elección se recuerda para la siguiente vez.
   (await p7.evaluate(() => localStorage.getItem('ad-calidad'))) === 'ligera'

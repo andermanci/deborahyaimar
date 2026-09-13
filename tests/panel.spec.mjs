@@ -12,6 +12,7 @@ const mal = (m) => { fallos.push(m); console.log(`  ✗ ${m}`); };
 const foto = (id, extra = {}) => ({
   id, tipo: 'foto', origen: 'invitado', categoria: null, nombre: 'María',
   oculta: false, thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, poster: null,
+  original: null, calidad: null,
   duracion: null, ancho: 1200, alto: 800, ts: 1000, ...extra,
 });
 
@@ -60,7 +61,11 @@ async function nuevaPagina() {
       total: 4, visibles: 3, ocultas: 1, fotos: 2, videos: 1, invitados: 3, oficiales: 0, personas: 2,
       ranking: [{ nombre: 'María', n: 2 }, { nombre: 'Jon', n: 1 }],
       porHora: [{ hora: '19', n: 1 }, { hora: '20', n: 2 }],
-      almacenamiento: { bytes: 2 * 1024 ** 3, objetos: 8, limiteBytes: 10 * 1024 ** 3 },
+      calidad: { original: 5, ligera: 2, sinOpcion: 3, conCopia: 4 },
+      almacenamiento: {
+        bytes: 2 * 1024 ** 3, objetos: 8,
+        bytesOriginales: 1.5 * 1024 ** 3, limiteBytes: 10 * 1024 ** 3,
+      },
     }) });
     if (url.pathname === '/admin/categorias') {
       const c = JSON.parse(req.postData() ?? '{}');
@@ -348,6 +353,55 @@ console.log('\n8) Crear y borrar categorías');
     ? ok(`el desplegable de subida se actualiza (${opciones.join(', ')})`)
     : mal(`opciones: ${opciones.join(', ')}`);
   await page.close();
+}
+
+// ── Qué calidad eligió cada invitado ─────────────────────────────────
+console.log('\nCalidad elegida');
+{
+  const pg = await nuevaPagina();
+  datos = [
+    foto('k1', { nombre: 'Ana',  calidad: 'original', original: `${BASE}/foto3.jpg` }),
+    foto('k2', { nombre: 'Blas', calidad: 'ligera' }),
+    // Eligió original pero no hay copia: NO es lo mismo que elegir ligera, y
+    // distinguirlo es justo para lo que existe la columna.
+    foto('k3', { nombre: 'Ceci', calidad: 'original', original: null }),
+    foto('k4', { nombre: 'Dani', calidad: null }),   // antes de que hubiera opción
+  ];
+  await pg.goto(PANEL, { waitUntil: 'networkidle' });
+  await entrarEn(pg);
+  await pg.waitForSelector('.celda');
+
+  const sello = async (id) => pg.evaluate((i) => {
+    const c = document.querySelector(`.celda[data-id="${i}"] .sello`);
+    return c ? { texto: c.textContent, clase: c.className } : null;
+  }, id);
+
+  const a = await sello('k1');
+  a?.texto === 'Original' && a.clase.includes('original')
+    ? ok('marca las que eligieron original y tienen copia')
+    : mal(`k1: ${JSON.stringify(a)}`);
+  (await sello('k2'))?.texto === 'Ligera' ? ok('marca las que eligieron ligera') : mal('k2 sin marca de ligera');
+  const c = await sello('k3');
+  c?.texto === 'Sin copia' && c.clase.includes('sin-copia')
+    ? ok('distingue «eligió original pero no hay copia» de «eligió ligera»')
+    : mal(`k3: ${JSON.stringify(c)}`);
+  (await sello('k4')) === null ? ok('las de antes de la opción no llevan marca') : mal('k4 lleva marca sin haber elegido');
+
+  // Y el reparto en el resumen.
+  await pg.click('.seccion[data-vista="stats"]');
+  await pg.waitForSelector('#calidadFilas .fila-cal');
+  const reparto = await pg.evaluate(() => [...document.querySelectorAll('#calidadFilas .fila-cal')]
+    .map((f) => [f.querySelector('.nom').textContent, f.querySelector('.n').textContent]));
+  JSON.stringify(reparto) === JSON.stringify([['Original', '5'], ['Más ligera', '2'], ['Antes de la opción', '3']])
+    ? ok(`el resumen reparte las elecciones: ${JSON.stringify(reparto)}`)
+    : mal(`reparto inesperado: ${JSON.stringify(reparto)}`);
+
+  const nota = await pg.locator('#calidadNota').textContent();
+  nota?.includes('4 de 5') ? ok(`avisa de las que se quedaron sin copia: "${nota}"`) : mal(`nota: "${nota}"`);
+  (await pg.locator('#medidorTxt').textContent())?.includes('1.50 GB son copias originales')
+    ? ok('el espacio dice cuánto ocupan los originales')
+    : mal(`medidor: "${await pg.locator('#medidorTxt').textContent()}"`);
+  await pg.close();
 }
 
 await nav.close();

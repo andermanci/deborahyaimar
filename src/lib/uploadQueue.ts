@@ -123,14 +123,18 @@ export interface ItemCola {
   opciones?: OpcionesSubida;
 }
 
-/**
- * Solo lo usa el panel de los novios, para el reportaje oficial. Sin esto, la
- * cola se comporta exactamente igual que para un invitado.
- */
 export interface OpcionesSubida {
+  /** Estos tres solo los usa el panel de los novios, para el reportaje. */
   origen?: 'invitado' | 'oficial';
   categoria?: string | null;
   token?: string;   // sesión del panel; el servidor la exige si origen es 'oficial'
+  /**
+   * Qué calidad ELIGIÓ quien sube, para que quede registrado en el índice.
+   * No se deduce de si hay original: se puede elegir 'original' y acabar sin
+   * copia (la foto ya venía comprimida, o la subida no llegó), y eso no es lo
+   * mismo que haber elegido 'ligera'.
+   */
+  calidad?: 'original' | 'ligera';
 }
 
 export interface ResumenCola {
@@ -839,6 +843,7 @@ export class ColaSubida {
       ancho: item.meta.ancho,
       alto: item.meta.alto,
     };
+    if (item.opciones?.calidad) cuerpo.calidad = item.opciones.calidad;
     if (item.opciones?.origen === 'oficial') {
       cuerpo.origen = 'oficial';
       cuerpo.categoria = item.opciones.categoria ?? null;

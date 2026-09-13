@@ -373,6 +373,13 @@ async function completar(req: Request, env: Env): Promise<Response> {
   const categoria = origen === 'oficial' && await existeCategoria(env, body?.categoria)
     ? body.categoria : null;
 
+  // Qué eligió el invitado, no qué acabó pasando. Se guarda aparte de
+  // key_original porque son cosas distintas: se puede elegir «original» y
+  // acabar sin copia (la foto ya venía comprimida, o la subida no llegó), y
+  // eso NO es lo mismo que haber elegido «ligera».
+  const calidad = body?.calidad === 'original' || body?.calidad === 'ligera'
+    ? body.calidad : null;
+
   // Las claves las generó el servidor bajo <origen>/<id>/: verifica que
   // el cliente no las haya cambiado por otras.
   const prefijoOk = `${origen === 'oficial' ? 'oficial' : 'invitados'}/${id}/`;
@@ -412,8 +419,8 @@ async function completar(req: Request, env: Env): Promise<Response> {
     `insert or ignore into media
        (id, tipo, origen, categoria, nombre, device_id,
         key_thumb, key_web, key_original, key_poster,
-        duracion_s, ancho, alto, oculta, created_at)
-     values (?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, 0, ?)`
+        duracion_s, ancho, alto, calidad, oculta, created_at)
+     values (?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, 0, ?)`
   ).bind(
     id, tipo, origen, categoria,
     (nombre ?? '').toString().slice(0, 60) || null,
@@ -422,6 +429,7 @@ async function completar(req: Request, env: Env): Promise<Response> {
     Number(body.duracion_s) || null,
     Number(body.ancho) || null,
     Number(body.alto) || null,
+    calidad,
     Date.now()
   ).run();
 
@@ -657,7 +665,7 @@ async function adminMedia(req: Request, env: Env): Promise<Response> {
   const { results } = await env.DB.prepare(
     `select id, tipo, origen, categoria, nombre, device_id, oculta,
             key_thumb, key_web, key_original, key_poster,
-            duracion_s, ancho, alto, created_at
+            duracion_s, ancho, alto, calidad, created_at
        from media
       ${donde.length ? 'where ' + donde.join(' and ') : ''}
       order by created_at desc
@@ -675,6 +683,10 @@ async function adminMedia(req: Request, env: Env): Promise<Response> {
     thumb: `${base}/${r.key_thumb}`,
     web: `${base}/${r.key_web}`,
     original: r.key_original ? `${base}/${r.key_original}` : null,
+    // Lo que ELIGIÓ quien la subió. null = se subió antes de que hubiera
+    // opción. Ojo: 'original' sin `original` significa que la copia no se
+    // guardó, no que eligiera lo otro.
+    calidad: r.calidad ?? null,
     poster: r.key_poster ? `${base}/${r.key_poster}` : null,
     duracion: r.duracion_s,
     ancho: r.ancho,
@@ -749,7 +761,7 @@ async function adminCategoria(req: Request, env: Env): Promise<Response> {
 // ── GET /admin/stats ──────────────────────────────────────────────────
 async function adminStats(req: Request, env: Env): Promise<Response> {
   const { results } = await env.DB.prepare(
-    `select tipo, origen, oculta, nombre, created_at from media`
+    `select tipo, origen, oculta, nombre, calidad, key_original, created_at from media`
   ).all();
   const filas = (results ?? []) as any[];
 
@@ -765,10 +777,16 @@ async function adminStats(req: Request, env: Env): Promise<Response> {
   }
 
   // El espacio sale de R2, no de la base: así no hay que guardar tamaños.
-  let bytes = 0, objetos = 0, cursor: string | undefined;
+  // De paso se separa lo que ocupan los originales, que es la partida que
+  // decide si algún día hay que pagar por almacenamiento.
+  let bytes = 0, objetos = 0, bytesOriginales = 0, cursor: string | undefined;
   do {
     const lote: R2Objects = await env.MEDIA.list({ limit: 1000, cursor });
-    for (const o of lote.objects) { bytes += o.size; objetos++; }
+    for (const o of lote.objects) {
+      bytes += o.size;
+      objetos++;
+      if (/\/original\.[a-z0-9]+$/.test(o.key)) bytesOriginales += o.size;
+    }
     cursor = lote.truncated ? lote.cursor : undefined;
   } while (cursor);
 
@@ -784,7 +802,21 @@ async function adminStats(req: Request, env: Env): Promise<Response> {
     ranking: [...porNombre.entries()].sort((a, b) => b[1] - a[1]).slice(0, 15)
       .map(([nombre, n]) => ({ nombre, n })),
     porHora: [...porHora.entries()].sort().map(([hora, n]) => ({ hora, n })),
-    almacenamiento: { bytes, objetos, limiteBytes: 10 * 1024 ** 3 },
+    // Qué eligió la gente. Solo cuenta lo de los invitados: el reportaje lo
+    // suben los novios desde el panel y ahí no hay nada que elegir.
+    calidad: (() => {
+      const inv = filas.filter((r) => r.origen === 'invitado' && r.oculta !== 1);
+      const eligieronOriginal = inv.filter((r) => r.calidad === 'original');
+      return {
+        original: eligieronOriginal.length,
+        ligera: inv.filter((r) => r.calidad === 'ligera').length,
+        // Antes de que existiera la opción: no eligieron, les tocó.
+        sinOpcion: inv.filter((r) => !r.calidad).length,
+        // De quienes eligieron original, en cuántas hay copia de verdad.
+        conCopia: eligieronOriginal.filter((r) => r.key_original).length,
+      };
+    })(),
+    almacenamiento: { bytes, objetos, bytesOriginales, limiteBytes: 10 * 1024 ** 3 },
   }, env);
 }
 

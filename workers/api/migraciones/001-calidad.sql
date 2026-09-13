@@ -1,0 +1,19 @@
+-- Qué calidad ELIGIÓ el invitado al subir la foto.
+--
+-- No basta con mirar si hay key_original: un null puede significar cuatro
+-- cosas muy distintas, y solo una es una decisión.
+--   · eligió «ligera»                                    → decisión
+--   · eligió «original» pero la foto ya venía comprimida
+--     y la copia no aportaba nada, así que se descartó    → no es decisión
+--   · eligió «original» y la copia no llegó a subirse     → no es decisión
+--   · se subió antes de que existiera la opción           → no hubo decisión
+--
+-- Valores: 'original' | 'ligera' | null (subida antes de que existiera la opción).
+--
+-- Aplicar con:
+--   cd workers/api
+--   npx wrangler d1 execute ad-galeria --remote --file=migraciones/001-calidad.sql
+--
+-- Es aditivo: el código que ya está desplegado ignora la columna, así que se
+-- puede aplicar ANTES de desplegar nada y sin cortar el servicio.
+alter table media add column calidad text;

@@ -19,8 +19,14 @@ export interface MediaAdmin {
   oculta: boolean;
   thumb: string;
   web: string;
-  /** Copia tal cual la subió el invitado. null si la subió en modo ligero. */
+  /** Copia tal cual la subió el invitado, si es que hay. */
   original: string | null;
+  /**
+   * Qué ELIGIÓ quien la subió. null = se subió antes de que hubiera opción.
+   * 'original' con `original` a null significa que la copia no se guardó (la
+   * foto ya venía comprimida, o la subida no llegó), no que eligiera lo otro.
+   */
+  calidad: 'original' | 'ligera' | null;
   poster: string | null;
   duracion: number | null;
   ancho: number;
@@ -40,7 +46,10 @@ export interface Estadisticas {
   personas: number;
   ranking: { nombre: string; n: number }[];
   porHora: { hora: string; n: number }[];
-  almacenamiento: { bytes: number; objetos: number; limiteBytes: number };
+  // Opcionales: un Worker anterior a esta versión no los manda, y el panel
+  // tiene que seguir pintando el resumen igual.
+  calidad?: { original: number; ligera: number; sinOpcion: number; conCopia: number };
+  almacenamiento: { bytes: number; objetos: number; bytesOriginales?: number; limiteBytes: number };
 }
 
 export interface Sesion {

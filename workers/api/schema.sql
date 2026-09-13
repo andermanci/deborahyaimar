@@ -10,11 +10,16 @@ create table if not exists media (
   device_id     text,                      -- permite "borrar la mía" sin cuentas
   key_thumb     text not null,             -- 600px  webp ~60KB
   key_web       text not null,             -- 2560px webp ~500KB  (en vídeo: el .mp4)
-  key_original  text,                      -- solo 'oficial'
+  key_original  text,                      -- copia tal cual la subió el invitado
+  -- Qué ELIGIÓ el invitado: 'original' | 'ligera' | null (antes de la opción).
+  -- Va aparte de key_original a propósito: un key_original nulo puede ser que
+  -- eligiera ligera, que la copia no aportara nada y se descartase, o que no
+  -- llegara a subirse. Solo esto dice qué decidió. Ver migraciones/001.
   key_poster    text,                      -- solo 'video'
   duracion_s    real,
   ancho         integer,
   alto          integer,
+  calidad       text,
   oculta        integer not null default 0,
   created_at    integer not null           -- epoch ms
 );
