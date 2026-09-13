@@ -202,7 +202,20 @@ dejaría de funcionar.
 | R2 almacenamiento | 10 GB | ver abajo |
 | R2 egress | ilimitado y gratis | ~50-100 GB |
 | Workers | 100 k/día | ~6 k/día |
-| D1 filas leídas | 5 M/día | ~260 k |
+| D1 filas leídas | 5 M/día | ~200 k con 139 fotos |
+
+**El techo real de la galería son las filas de D1, no el navegador.** Medido con
+1.000 fotos simuladas: la rejilla pinta igual de rápido que con 139 (~1 s), el
+índice viaja en 38 KB (brotli lo comprime 11:1 porque las URLs se repiten) y
+solo se descargan las miniaturas visibles, gracias al `loading="lazy"`. Paginar
+la rejilla no ahorraría nada, y rompería el visor: la tira y el deslizamiento
+necesitan la lista entera.
+
+Lo que sí escala mal es la consulta: el borde cachea el índice `TTL_INDICE`
+segundos, y en cada ventana que caduca el Worker lee TODAS las fotos de D1. A
+15 s eran 5.760 consultas al día y el límite gratuito se alcanzaba con ~870
+fotos. A 60 s son 1.440, y el techo se va a ~3.500. Si algún día se acerca, la
+siguiente palanca es subir más el TTL, no paginar.
 
 Con originales, el almacenamiento va a ~5 MB por foto en vez de ~1 MB:
 

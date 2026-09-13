@@ -58,9 +58,33 @@ const MAX_ORIGINAL = 50_000_000;
 // Las partes siguen siendo de 5 MB (el mínimo de S3 para las no finales) en vez
 // de agrandarlas: cuanto más pequeña la parte, menos se pierde al cortarse la
 // conexión, que es de lo que va toda la cola.
+/**
+ * Tope de filas del índice. Estaba en 2.000 y era una trampa: en la foto 2.001
+ * la galería habría dejado de enseñar las más viejas SIN DECIR NADA. Ahora es
+ * un número que no se va a alcanzar, y si algún día se alcanzase, la respuesta
+ * lo dice y queda en el log.
+ *
+ * El límite real no es este, son las filas que D1 deja leer al día (ver
+ * TTL_INDICE): alrededor de 3.500 fotos.
+ */
+const MAX_INDICE = 10_000;
+
 const PART_SIZE = 5 * 1024 * 1024;
 const MAX_PARTES = 50;               // → 250 MB de vídeo como techo
-const TTL_INDICE = 15;               // segundos de frescura del índice
+/**
+ * Frescura del índice en el borde, en segundos.
+ *
+ * Eran 15 s, pensados para el directo de la boda: importaba ver aparecer las
+ * fotos de los demás casi en tiempo real. Ya no, y esos 15 s son caros: el
+ * Worker consulta D1 una vez por cada ventana que caduca, y CADA consulta lee
+ * todas las fotos. A 15 s son 5.760 consultas al día; con ~870 fotos eso son ya
+ * los 5 millones de filas diarias del plan gratuito, y la galería se cae.
+ *
+ * A 60 s son 1.440 consultas al día: cuatro veces menos, y el techo se va a
+ * ~3.500 fotos. Nadie lo nota, porque las fotos propias no dependen de esto:
+ * al terminar de subir se pide el índice saltándose la caché del borde.
+ */
+const TTL_INDICE = 60;
 const FIRMA_TTL = 6 * 3600;          // 6 h: una subida lenta jamás caduca a medias
 
 const ROLES = ['thumb', 'web', 'original', 'poster', 'video'] as const;
@@ -546,8 +570,8 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
        from media
       where oculta = 0 and origen = ?
       order by created_at desc
-      limit 2000`
-  ).bind(origen).all();
+      limit ?`
+  ).bind(origen, MAX_INDICE).all();
 
   const base = env.MEDIA_BASE;
   const items = await Promise.all((results ?? []).map(async (r: any) => ({
@@ -568,7 +592,11 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     ts: r.created_at,
   })));
 
-  const res = json({ items, total: items.length }, env, 200, {
+  // Si alguna vez se llega al tope, que se vea: en la respuesta y en el log.
+  const truncado = items.length >= MAX_INDICE;
+  if (truncado) console.log(`ÍNDICE TRUNCADO en ${MAX_INDICE} (origen ${origen})`);
+
+  const res = json({ items, total: items.length, truncado }, env, 200, {
     // max-age=0 para el NAVEGADOR, s-maxage para el CDN, y NADA de
     // stale-while-revalidate. Ver la nota sobre el bucle de caché en indice().
     'Cache-Control': `public, max-age=0, s-maxage=${TTL_INDICE}`,
@@ -633,8 +661,8 @@ async function adminMedia(req: Request, env: Env): Promise<Response> {
        from media
       ${donde.length ? 'where ' + donde.join(' and ') : ''}
       order by created_at desc
-      limit 3000`
-  ).bind(...args).all();
+      limit ?`
+  ).bind(...args, MAX_INDICE).all();
 
   const base = env.MEDIA_BASE;
   const items = (results ?? []).map((r: any) => ({
