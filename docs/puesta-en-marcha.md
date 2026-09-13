@@ -195,6 +195,82 @@ dejaría de funcionar.
 
 ---
 
+## Cuando la galería se ve vacía: el bloqueo de las operadoras
+
+**Síntoma:** la página carga pero no hay ni una foto. En el panel tampoco.
+
+**Causa:** las operadoras españolas bloquean por orden judicial rangos de IP de Cloudflare
+para perseguir las emisiones piratas de fútbol, y se llevan por delante cualquier web
+alojada en esas IP. La página del sitio está en Netlify (IP de AWS) y no le afecta; el
+índice y las fotos están en Cloudflare y sí.
+
+**Cómo confirmarlo en diez segundos.** El bloqueo no puede meter un aviso dentro de HTTPS,
+así que tira el 443 y deja el 80 para responder una página. Basta con pedirla:
+
+```sh
+curl -s http://api.deborahyaimar.org/ | grep -i vodafone
+# → Por causas ajenas a Vodafone, esta web no está disponible
+```
+
+Lo medido el 13/09/2026, un domingo por la tarde:
+
+| IP | 443 | 80 |
+|---|---|---|
+| 188.114.96.5 (zona `deborahyaimar.org`) | bloqueado | página de la operadora |
+| 188.114.97.5 (zona `deborahyaimar.org`) | bloqueado | página de la operadora |
+| 188.114.96.1 y 188.114.99.5 (vecinas) | abiertas | abiertas |
+
+Que las vecinas del mismo bloque funcionen es lo que descarta una avería: **el bloqueo es
+por IP concreta**. Alcanzaba también al endpoint de subida de R2 y a `r2.dev`.
+
+**Va y viene con el calendario de partidos.** Que hoy funcione no significa que esté
+arreglado.
+
+**Qué hace la galería mientras tanto.** Nada más: lo cuenta. Antes decía «Empieza tú,
+todavía no hay ninguna foto», que con 142 fotos guardadas es mentira y da a entender que se
+han borrado. Ahora distingue tres situaciones: mientras espera no afirma nada, si no hay
+conexión lo dice, y si el servidor no responde teniendo conexión explica el bloqueo y
+ofrece reintentar. No ofrece subir, porque la subida sale por el mismo sitio que no
+responde. Ver `pintar()` en `src/pages/galeria.astro`.
+
+Las subidas que ya estuvieran en cola no se pierden: la cola las guarda en el móvil,
+reintenta sola y las sube cuando el bloqueo se levanta, aunque se cierre la pestaña.
+
+### La salida que se descartó, por si algún día molesta lo bastante
+
+Se puede esquivar el bloqueo haciendo que el navegador hable solo con Netlify y sea Netlify
+—que no está en España— quien hable con Cloudflare. Son dos reglas en `netlify.toml` con
+`status = 200`, que es lo que hace de pasarela en vez de redirigir:
+
+```toml
+[[redirects]]
+  from = "/api/*"
+  to = "https://api.deborahyaimar.org/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/m/*"
+  to = "https://fotos.deborahyaimar.org/:splat"
+  status = 200
+  force = true
+```
+
+Más `PUBLIC_API_BASE = https://deborahyaimar.com/api`, `PUBLIC_MEDIA_BASE =
+https://deborahyaimar.com/m` y, en `wrangler.toml`, `MEDIA_BASE` apuntando a lo mismo (es
+lo que usa el Worker para construir las URL del índice). Netlify primero y el Worker
+después, o el Worker devolvería URL que Netlify aún no sabe servir.
+
+Dos motivos para no haberlo hecho:
+
+1. **El tráfico de las fotos dejaría de salir gratis por R2** y pasaría a contar en la cuota
+   de Netlify (100 GB/mes). Estimado con los datos reales, unos 6 GB al mes; holgado, pero
+   deja de ser gratis del todo.
+2. **Las subidas no deben pasar por ahí.** La pasarela de Netlify corta a los ~28 s, así que
+   un original de 20 MB por conexión lenta fallaría más que yendo directo.
+
+---
+
 ## Presupuesto
 
 | Recurso | Límite gratuito | Estimado |

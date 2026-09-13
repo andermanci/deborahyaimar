@@ -150,6 +150,12 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       min-height: calc(100dvh - var(--nav-h) - var(--fab-h));
     }
     .vacio.visible { display: flex; }
+    /* Mientras se espera al índice no se afirma nada, pero tampoco se deja la
+       pantalla en blanco eternamente. El retardo de la animación hace que este
+       aviso solo llegue a verse si la espera se alarga: en una carga normal,
+       de menos de un segundo, se repinta antes de que aparezca. Sin
+       temporizadores en JS. */
+    .vacio.esperando { animation: aparecer 0.4s 1.4s both; }
     .vacio-icono {
       width: 64px; height: 64px; border-radius: 50%;
       background: var(--blush); color: var(--pink-deep);
@@ -667,13 +673,15 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     // invitado se quedaría mirando una página sin forma de añadir nada.
     let mostrandoVacio = false;
     let subiendo = false;
+    /** No se puede llegar al servidor: subir tampoco funcionaría, así que no se ofrece. */
+    let sinSubida = false;
 
     /** Se aparta solo cuando manda el botón grande del estado vacío o cuando
         la barra de progreso ocupa su sitio: nunca dos botones iguales. */
     function sincronizarFab() {
       const fabEl = document.getElementById('fab') as HTMLElement | null;
       if (!fabEl) return;
-      fabEl.hidden = subiendo || mostrandoVacio;
+      fabEl.hidden = subiendo || mostrandoVacio || sinSubida;
     }
 
     const visibles = (): Item[] =>
@@ -775,20 +783,63 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       }
 
       const sinFotos = items.length === 0;
-      vacio.classList.toggle('visible', sinFotos);
-      rejilla.style.display = sinFotos ? 'none' : 'flex';
-      mostrandoVacio = sinFotos && cat === 'invitados';
-      sincronizarFab();
 
-      if (cat === 'invitados') {
+      // Vacío porque no ha llegado el índice NO es lo mismo que vacío porque
+      // todavía no hay fotos. Decir «Empieza tú, todavía no hay ninguna foto»
+      // cuando en realidad hay 142 y lo que pasa es que no se pueden pedir es
+      // mentir, y encima da a entender que se han borrado.
+      //
+      // Y hay un tercer estado, el que más dura cuando hay bloqueo: TODAVÍA NO
+      // SE SABE. La petición tarda hasta 8 s en rendirse, y durante ese rato no
+      // se puede afirmar ninguna de las dos cosas.
+      const esperando = !indiceCargado && !indiceFalla;
+      const incomunicados = sinFotos && indiceFalla && !indiceCargado;
+
+      vacio.classList.toggle('visible', sinFotos);
+      vacio.classList.toggle('esperando', sinFotos && esperando);
+      rejilla.style.display = sinFotos ? 'none' : 'flex';
+      mostrandoVacio = sinFotos && !esperando && cat === 'invitados';
+
+      const boton = $('vacioBoton') as HTMLButtonElement;
+
+      if (esperando) {
+        $('vacioTitulo').textContent = 'Un momento…';
+        $('vacioTexto').textContent = 'Buscando las fotos.';
+        boton.hidden = true;
+      } else if (incomunicados) {
+        // Sin conexión el navegador ya lo sabe. Con conexión y sin respuesta,
+        // en España lo que suele haber detrás es el bloqueo de IP del fútbol,
+        // pero podría ser cualquier otra caída: el texto vale para las dos y no
+        // promete nada que no podamos saber desde aquí.
+        if (!navigator.onLine) {
+          $('vacioTitulo').textContent = 'Sin conexión';
+          $('vacioTexto').textContent = 'No hay manera de llegar a las fotos ahora mismo. En cuanto vuelva la conexión, aquí siguen todas.';
+        } else {
+          $('vacioTitulo').textContent = 'Ni caso, es el fútbol';
+          $('vacioTexto').textContent =
+            'Tus fotos están a salvo, pero tu operador no nos deja llegar a ellas. ' +
+            'Pasa en España cuando hay partido: bloquean direcciones de internet enteras para ' +
+            'perseguir las emisiones piratas y se llevan por delante lo que pillen. ' +
+            'Vuelve cuando acaben los partidos y estarán todas ahí.';
+        }
+        // Nada de ofrecer subir: la subida sale por el mismo sitio que no
+        // responde, así que solo serviría para dejar la foto esperando.
+        boton.hidden = false;
+        boton.textContent = 'Reintentar';
+      } else if (cat === 'invitados') {
         $('vacioTitulo').textContent = 'Empieza tú';
         $('vacioTexto').textContent = 'Todavía no hay ninguna foto. Sube la primera y ábrele el álbum a todos.';
-        ($('vacioBoton') as HTMLElement).hidden = false;
+        boton.hidden = false;
+        boton.textContent = 'Añadir mis fotos';
       } else {
         $('vacioTitulo').textContent = 'Muy pronto';
         $('vacioTexto').textContent = 'Cuando el fotógrafo entregue el reportaje, aparecerá aquí.';
-        ($('vacioBoton') as HTMLElement).hidden = true;
+        boton.hidden = true;
       }
+
+      // El botón flotante tampoco, por lo mismo.
+      sinSubida = incomunicados;
+      sincronizarFab();
 
       const vivo = $('vivo');
       if (cat === 'invitados' && items.length) {
@@ -1218,6 +1269,13 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     // sigue sirviendo su copia de 60 s. Lo que se evita es la caché privada del
     // navegador. Y la URL sigue sin cache-buster: un ?t=Date.now() sí saltaría
     // la caché del borde y recrearía el fallo original.
+    const PLAZO_INDICE = 8_000;
+
+    /** Si alguna vez llegó el índice. Falso = nunca hemos visto la galería. */
+    let indiceCargado = false;
+    /** El último intento no llegó. Con `indiceCargado` decide qué contarle al invitado. */
+    let indiceFalla = false;
+
     async function traer(origen: 'invitado' | 'oficial', forzar = false): Promise<Item[] | null> {
       try {
         let url = origen === 'oficial' ? `${API}/indice.json?origen=oficial` : `${API}/indice.json`;
@@ -1229,10 +1287,21 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         // persona, y es lo que hace que tus fotos aparezcan al instante en vez
         // de esperar a que caduque la copia del CDN.
         if (forzar) url += `${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-        const res = await fetch(url, { cache: 'no-store' });
-        if (!res.ok) return null;
-        const datos = await res.json();
-        return Array.isArray(datos.items) ? datos.items : null;
+        // Con plazo. Cuando las operadoras bloquean las IP de Cloudflare, la
+        // conexión no se rechaza: se queda colgada, y el navegador tarda mucho
+        // en rendirse. Sin esto el invitado se come esa espera mirando una
+        // pantalla en blanco antes de que podamos contarle lo que pasa. Una
+        // respuesta sana llega en centenares de milisegundos.
+        const ctrl = new AbortController();
+        const reloj = setTimeout(() => ctrl.abort(), PLAZO_INDICE);
+        try {
+          const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+          if (!res.ok) return null;
+          const datos = await res.json();
+          return Array.isArray(datos.items) ? datos.items : null;
+        } finally {
+          clearTimeout(reloj);
+        }
       } catch { return null; }
     }
 
@@ -1275,6 +1344,11 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       if (inv) invitados = inv;
       if (ofi) oficiales = ofi;
 
+      // Solo importa el índice de invitados: es el que decide si la galería
+      // tiene algo que enseñar. Que falle el del reportaje no es una avería.
+      indiceFalla = inv === null;
+      if (inv) indiceCargado = true;
+
       pintarPestanas();
       pintar();
 
@@ -1305,7 +1379,12 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 
     const abrirSelector = () => selector.click();
     $('fab').addEventListener('click', abrirSelector);
-    $('vacioBoton').addEventListener('click', abrirSelector);
+    // El mismo botón sirve para dos cosas según lo que esté pasando: añadir
+    // fotos, o volver a intentar llegar al servidor cuando no se puede.
+    $('vacioBoton').addEventListener('click', () => {
+      if (sinSubida) { void refrescar(true); return; }
+      abrirSelector();
+    });
 
     // ── CALIDAD DE SUBIDA ─────────────────────────────────────────
     // Por defecto, original: la boda ya ha pasado y lo que se sube ahora se

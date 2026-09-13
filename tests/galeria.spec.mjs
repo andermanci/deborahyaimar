@@ -803,6 +803,104 @@ console.log('\n18) La rejilla responde en toda su superficie');
   await ancho.close();
 }
 
+// ── 19. Cuando no se puede llegar al índice, no mentir ───────────────
+// El bloqueo de IP de las operadoras deja la página en pie (está en Netlify)
+// pero tumba el índice y las fotos (están en Cloudflare). Sin esto, la galería
+// enseñaba «Empieza tú. Todavía no hay ninguna foto» con 142 fotos guardadas:
+// mentira, y encima da a entender que se han borrado.
+console.log('\n19) No se puede llegar al índice');
+{
+  const pB = await ctx.newPage();
+  pB.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await pB.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+
+  // Así se comporta un bloqueo de verdad: la conexión ni se rechaza ni
+  // responde, se queda colgada.
+  let colgado = true;
+  const fotos = [{
+    id: 'b1', tipo: 'foto', categoria: null, nombre: 'Ana', deviceHash: 'ajena0000000',
+    thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, original: null, poster: null,
+    duracion: null, ancho: 1200, alto: 800, ts: 5,
+  }];
+  await pB.route('**/indice.json*', (r) => {
+    if (colgado) return new Promise(() => {});   // nunca resuelve
+    return r.fulfill({ status: 200, contentType: 'application/json',
+      body: JSON.stringify(r.request().url().includes('oficial') ? { items: [] } : { items: fotos }) });
+  });
+
+  await pB.goto(`${BASE}/galeria/`, { waitUntil: 'domcontentloaded' });
+
+  // Mientras no se sabe, no se afirma nada: ni que hay fotos ni que no las hay.
+  await pB.waitForTimeout(700);
+  const pronto = (await pB.locator('#vacioTitulo').textContent())?.trim();
+  pronto === 'Un momento…'
+    ? ok('mientras se espera no dice que no haya fotos')
+    : mal(`nada más entrar dice «${pronto}»`);
+
+  // Y cuando la petición se rinde, lo cuenta.
+  await pB.waitForFunction(
+    () => document.getElementById('vacioTitulo')?.textContent?.includes('fútbol'),
+    { timeout: 20000 },
+  ).then(() => ok('al rendirse explica el bloqueo')).catch(() => mal('nunca explicó nada'));
+
+  const texto = (await pB.locator('#vacioTexto').textContent()) ?? '';
+  texto.includes('a salvo') ? ok('y tranquiliza: las fotos están a salvo') : mal(`texto: "${texto.slice(0, 60)}"`);
+  !texto.includes('Todavía no hay ninguna foto') ? ok('no dice que la galería esté vacía') : mal('sigue diciendo que no hay fotos');
+
+  // Subir tampoco funcionaría: sale por el mismo sitio que no responde.
+  (await pB.locator('#fab').isHidden()) ? ok('no ofrece el botón de subir') : mal('ofrece subir hacia un servidor que no responde');
+  (await pB.locator('#vacioBoton').textContent())?.trim() === 'Reintentar'
+    ? ok('ofrece reintentar')
+    : mal(`el botón dice «${(await pB.locator('#vacioBoton').textContent())?.trim()}»`);
+
+  // Y se recupera sola en cuanto vuelve, sin recargar.
+  colgado = false;
+  await pB.click('#vacioBoton');
+  await pB.waitForSelector('.tarjeta', { timeout: 20000 })
+    .then(() => ok('al volver el servicio, la galería se recupera sin recargar'))
+    .catch(() => mal('no se recuperó'));
+  (await pB.locator('.vacio.visible').count()) === 0 ? ok('y el mensaje desaparece') : mal('el mensaje se queda puesto');
+  await pB.close();
+}
+
+// ── 20. Sin conexión es otra cosa, y se dice distinto ────────────────
+console.log('\n20) Sin conexión');
+{
+  const pD = await ctx.newPage();
+  pD.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await pD.addInitScript(() => Object.defineProperty(navigator, 'onLine', { get: () => false }));
+  await pD.route('**/categorias.json*', (r) => r.abort('internetdisconnected'));
+  await pD.route('**/indice.json*', (r) => r.abort('internetdisconnected'));
+  await pD.goto(`${BASE}/galeria/`, { waitUntil: 'domcontentloaded' });
+
+  await pD.waitForFunction(
+    () => document.getElementById('vacioTitulo')?.textContent === 'Sin conexión', { timeout: 15000 },
+  ).then(() => ok('dice que no hay conexión, no que sea el fútbol')).catch(() => mal('no distinguió el caso sin conexión'));
+  (await pD.locator('#vacioTexto').textContent())?.includes('siguen todas')
+    ? ok('y también tranquiliza')
+    : mal('el texto no tranquiliza');
+  await pD.close();
+}
+
+// ── 21. Una galería vacía DE VERDAD sigue diciendo lo de siempre ─────
+console.log('\n21) Vacía de verdad');
+{
+  const pE = await ctx.newPage();
+  pE.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await pE.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await pE.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await pE.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await pE.waitForTimeout(600);
+
+  (await pE.locator('#vacioTitulo').textContent())?.trim() === 'Empieza tú'
+    ? ok('el índice vacío sigue invitando a subir la primera')
+    : mal(`dice «${(await pE.locator('#vacioTitulo').textContent())?.trim()}»`);
+  (await pE.locator('#vacioBoton').textContent())?.trim() === 'Añadir mis fotos'
+    ? ok('y el botón vuelve a ser el de subir')
+    : mal('el botón se quedó en «Reintentar»');
+  await pE.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(50)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Todo correcto');
