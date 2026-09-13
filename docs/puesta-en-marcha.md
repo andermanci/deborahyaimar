@@ -156,14 +156,73 @@ boda.** Esa caché es lo único que separa este diseño del que se caía a los 4
 
 ---
 
-## Presupuesto (plan gratuito)
+## Calidad original (añadido después de la boda)
 
-| Recurso | Límite | Estimado |
+Al elegir fotos, el invitado decide cómo subirlas. La elección se recuerda en
+`localStorage` (`ad-calidad`) y por defecto es **original**.
+
+| Modo | Qué se guarda | Por foto |
 |---|---|---|
-| R2 almacenamiento | 10 GB | ~6,7 GB |
-| R2 egress | ilimitado | ~50-100 GB |
+| Original (por defecto) | thumb + web + **el archivo tal cual** | ~5 MB |
+| Más ligera | thumb + web | ~1 MB |
+
+En la galería se ve **igual** en los dos casos: la versión web (3072 px) es la que se
+muestra siempre. Lo que cambia es si hay copia descargable.
+
+Tres detalles del diseño que conviene no perder:
+
+- **El original se sube el último**, ya con la foto publicada (`/completar` primero,
+  `/original` después). Si la conexión se cae a mitad de esos 4-20 MB, la foto está en
+  la galería igualmente y solo se reintenta el archivo pesado. Al revés, un original
+  atascado impediría que la foto apareciera siquiera.
+- **Un original que no llega no es un fallo.** La cola marca `sinOriginal` y la foto
+  cuenta como subida: decir «fallida» empujaría al invitado a subirla otra vez.
+- **Si el original no pesa más que la versión web, se descarta.** Un reenvío de
+  WhatsApp o una captura ya vienen comprimidos: archivarlos sería pagar almacenamiento
+  por un duplicado peor.
+
+Los tipos admitidos como original son una lista cerrada (`TIPOS_ORIGINAL`, hasta 50 MB:
+jpeg, png, webp, heic, heif, avif, tiff, gif). No vale `image/*`: el bucket se sirve en
+un dominio público y un archivo que el navegador interpretara como HTML sería un XSS
+alojado en `fotos.deborahyaimar.org`.
+
+La descarga desde el visor **no** puede ser un `<a download>` apuntando al bucket: ese
+atributo se ignora entre dominios distintos y el navegador abriría la foto en vez de
+guardarla. Se traen los bytes y se crea un blob del propio origen (en el móvil se
+intenta antes la hoja de compartir, que es la única vía para que acabe en el carrete).
+Esto **depende del CORS del bucket**: si dejara de permitir GET desde el sitio, el botón
+dejaría de funcionar.
+
+---
+
+## Presupuesto
+
+| Recurso | Límite gratuito | Estimado |
+|---|---|---|
+| R2 almacenamiento | 10 GB | ver abajo |
+| R2 egress | ilimitado y gratis | ~50-100 GB |
 | Workers | 100 k/día | ~6 k/día |
 | D1 filas leídas | 5 M/día | ~260 k |
 
-Pasarse de los 10 GB **no provoca caída**: cuesta 0,015 $/GB de exceso. Revisa el panel
-de R2 la semana siguiente a la boda.
+Con originales, el almacenamiento va a ~5 MB por foto en vez de ~1 MB:
+
+| Fotos en original | Ocupa | Coste al mes |
+|---|---|---|
+| 1.000 | 5,2 GB | 0 € |
+| 2.000 | 10,4 GB | ~0,01 $ |
+| 5.000 | 26 GB | 0,24 $ |
+| 10.000 | 52 GB | 0,63 $ |
+
+Regla de bolsillo: **cada GB por encima de 10 cuesta 0,18 $ al año** (0,015 $/GB al mes,
+salida gratis). Llegar a 1 $/mes exige ~80 GB, o sea unas 15.000 fotos en original.
+
+> **Hay que tener facturación activada en Cloudflare**, aunque la factura sea de 0 €.
+> Sin método de pago en la cuenta, al llegar a 10 GB **R2 deja de aceptar escrituras** y
+> las subidas empiezan a fallar. Eso sí es un muro.
+
+No uses la clase *Infrequent Access* (0,01 $/GB) pese a ser más barata por GB: el tramo
+gratuito de 10 GB no aplica ahí, así que por debajo de 30 GB sale más cara, y además
+cobra por recuperar los datos.
+
+El panel de los novios enseña el espacio ocupado (`/admin/stats`, que lo cuenta
+recorriendo R2 de verdad, no estimándolo).

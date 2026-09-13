@@ -36,12 +36,28 @@ const TIPOS_OK: Record<string, number> = {
   'video/webm': 100_000_000,        // Chrome en Android
 };
 
+/**
+ * El rol 'original' se archiva tal cual sale del móvil, así que no pasa por el
+ * canvas y llega en formatos que el resto no puede tener (HEIC de iPhone sobre
+ * todo) y con otros pesos: 48 MP en HEIC son ~5 MB y un ProRAW ~25 MB.
+ *
+ * Sigue siendo una lista CERRADA: el bucket se sirve en un dominio público, y
+ * un archivo que el navegador interpretase como HTML sería un XSS alojado en
+ * fotos.deborahyaimar.org. Nada de `image/*`.
+ */
+const TIPOS_ORIGINAL: Record<string, true> = {
+  'image/jpeg': true, 'image/png': true, 'image/webp': true,
+  'image/heic': true, 'image/heif': true, 'image/avif': true,
+  'image/tiff': true, 'image/gif': true,
+};
+const MAX_ORIGINAL = 50_000_000;
+
 const PART_SIZE = 5 * 1024 * 1024;   // mínimo de S3 para partes no finales
 const MAX_PARTES = 20;               // → 100 MB de vídeo como techo
 const TTL_INDICE = 15;               // segundos de frescura del índice
 const FIRMA_TTL = 6 * 3600;          // 6 h: una subida lenta jamás caduca a medias
 
-const ROLES = ['thumb', 'web', 'poster', 'video'] as const;
+const ROLES = ['thumb', 'web', 'original', 'poster', 'video'] as const;
 type Rol = (typeof ROLES)[number];
 
 // ── Utilidades ────────────────────────────────────────────────────────
@@ -209,12 +225,21 @@ function jsonAdmin(data: unknown, env: Env, status = 200): Response {
   return json(data, env, status, { 'Cache-Control': 'no-store' });
 }
 
+const EXTENSIONES: Record<string, string> = {
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/heic': 'heic',
+  'image/heif': 'heif',
+  'image/avif': 'avif',
+  'image/tiff': 'tif',
+  'image/gif': 'gif',
+};
+
 function extension(contentType: string): string {
-  if (contentType === 'video/mp4') return 'mp4';
-  if (contentType === 'video/quicktime') return 'mov';
-  if (contentType === 'video/webm') return 'webm';
-  if (contentType === 'image/jpeg') return 'jpg';
-  return 'webp';
+  return EXTENSIONES[contentType] ?? 'webp';
 }
 
 // ── POST /firmar ──────────────────────────────────────────────────────
@@ -247,7 +272,10 @@ async function firmar(req: Request, env: Env): Promise<Response> {
     const size: number = Number(a?.size);
 
     if (!ROLES.includes(rol)) return error(`rol desconocido: ${rol}`, env);
-    const max = TIPOS_OK[contentType];
+    // El original tiene su propia lista de tipos y su propio tope.
+    const max = rol === 'original'
+      ? (TIPOS_ORIGINAL[contentType] ? MAX_ORIGINAL : undefined)
+      : TIPOS_OK[contentType];
     if (!max) return error(`tipo de archivo no permitido: ${contentType}`, env);
     if (!Number.isFinite(size) || size <= 0 || size > max) {
       return error(`tamaño fuera de rango para ${rol}`, env);
@@ -282,6 +310,9 @@ async function firmar(req: Request, env: Env): Promise<Response> {
 
       subidas.push({ rol, key, uploadId, partSize: PART_SIZE, urls });
     } else {
+      // PUT simple, también para el original. Un corte de red lo reinicia desde
+      // cero, pero el cliente lo sube EL ÚLTIMO (la foto ya está publicada) y
+      // un original típico son 4 MB: menos de una sola parte de multipart.
       subidas.push({ rol, key, url: await firmarPut(env, key) });
     }
   }
@@ -339,8 +370,13 @@ async function completar(req: Request, env: Env): Promise<Response> {
     await env.DB.prepare('delete from subidas_parciales where id = ?').bind(id).run();
   }
 
+  // `or ignore`: el cliente llama a /completar y, si la respuesta se pierde por
+  // el camino, lo reintenta. Sin esto el segundo intento choca con la clave
+  // primaria, devuelve 500 y la foto se marcaba como fallida estando ya en la
+  // galería. Reintentar ahora es inofensivo. El original NO se escribe aquí:
+  // llega después, por /original.
   await env.DB.prepare(
-    `insert into media
+    `insert or ignore into media
        (id, tipo, origen, categoria, nombre, device_id,
         key_thumb, key_web, key_original, key_poster,
         duracion_s, ancho, alto, oculta, created_at)
@@ -357,6 +393,42 @@ async function completar(req: Request, env: Env): Promise<Response> {
   ).run();
 
   return json({ ok: true, id }, env);
+}
+
+// ── POST /original ────────────────────────────────────────────────────
+// Apunta la copia original en una fila que YA existe. Va aparte de /completar
+// porque el original se sube al final: la foto está en la galería mucho antes
+// de que estos 4-20 MB terminen de llegar, y si no llegan nunca, lo único que
+// falta es el botón de descarga.
+async function guardarOriginal(req: Request, env: Env): Promise<Response> {
+  let body: any;
+  try { body = await req.json(); } catch { return error('JSON inválido', env); }
+
+  const { id, key_original, device_id } = body ?? {};
+  if (typeof id !== 'string' || !id) return error('falta id', env);
+  if (typeof key_original !== 'string' || !key_original) return error('falta key_original', env);
+
+  const fila = await env.DB.prepare('select origen, device_id from media where id = ?')
+    .bind(id).first<{ origen: string; device_id: string | null }>();
+  if (!fila) return error('esa foto no existe', env, 404);
+
+  // Misma clave que genera /firmar. Sin esta comprobación, un cliente podría
+  // apuntar la descarga de cualquier foto a un objeto ajeno del bucket.
+  const prefijoOk = `${fila.origen === 'oficial' ? 'oficial' : 'invitados'}/${id}/`;
+  if (!key_original.startsWith(prefijoOk)) return error('clave no autorizada', env, 403);
+
+  // Solo quien subió la foto puede completarla. El reportaje, solo los novios.
+  if (fila.origen === 'oficial') {
+    if (!(await esAdmin(req, env))) return error('no autorizado', env, 403);
+  } else if (!fila.device_id || fila.device_id !== device_id) {
+    return error('esa foto no es tuya', env, 403);
+  }
+
+  // Sin pisar uno ya guardado: un reintento tardío no puede cambiar el destino
+  // de una descarga que ya funciona.
+  await env.DB.prepare('update media set key_original = ? where id = ? and key_original is null')
+    .bind(key_original, id).run();
+  return json({ ok: true }, env);
 }
 
 // ── Categorías ────────────────────────────────────────────────────────
@@ -460,7 +532,8 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
 
   const { results } = await env.DB.prepare(
     `select id, tipo, origen, categoria, nombre, device_id,
-            key_thumb, key_web, key_poster, duracion_s, ancho, alto, created_at
+            key_thumb, key_web, key_original, key_poster,
+            duracion_s, ancho, alto, created_at
        from media
       where oculta = 0 and origen = ?
       order by created_at desc
@@ -476,6 +549,9 @@ async function indice(req: Request, env: Env, ctx: ExecutionContext): Promise<Re
     deviceHash: r.device_id ? await huella(r.device_id) : '',
     thumb: `${base}/${r.key_thumb}`,
     web: `${base}/${r.key_web}`,
+    // null = esa foto se subió en modo ligero: no hay nada que descargar
+    // aparte de la versión web, y la galería lo tiene en cuenta.
+    original: r.key_original ? `${base}/${r.key_original}` : null,
     poster: r.key_poster ? `${base}/${r.key_poster}` : null,
     duracion: r.duracion_s,
     ancho: r.ancho,
@@ -543,7 +619,8 @@ async function adminMedia(req: Request, env: Env): Promise<Response> {
 
   const { results } = await env.DB.prepare(
     `select id, tipo, origen, categoria, nombre, device_id, oculta,
-            key_thumb, key_web, key_poster, duracion_s, ancho, alto, created_at
+            key_thumb, key_web, key_original, key_poster,
+            duracion_s, ancho, alto, created_at
        from media
       ${donde.length ? 'where ' + donde.join(' and ') : ''}
       order by created_at desc
@@ -560,6 +637,7 @@ async function adminMedia(req: Request, env: Env): Promise<Response> {
     oculta: r.oculta === 1,
     thumb: `${base}/${r.key_thumb}`,
     web: `${base}/${r.key_web}`,
+    original: r.key_original ? `${base}/${r.key_original}` : null,
     poster: r.key_poster ? `${base}/${r.key_poster}` : null,
     duracion: r.duracion_s,
     ancho: r.ancho,
@@ -597,14 +675,16 @@ async function adminEliminar(req: Request, env: Env): Promise<Response> {
 
   const marcadores = ids.map(() => '?').join(',');
   const { results } = await env.DB.prepare(
-    `select key_thumb, key_web, key_poster from media where id in (${marcadores})`
+    `select key_thumb, key_web, key_original, key_poster from media where id in (${marcadores})`
   ).bind(...ids).all();
 
   // Primero los bytes: si falla D1 después, quedan filas huérfanas (visibles y
   // borrables). Al revés quedarían objetos invisibles ocupando espacio para
   // siempre.
+  // El original es el objeto más grande de los cuatro: olvidarlo aquí dejaría
+  // el espacio ocupado para siempre, sin ninguna fila que lo mencione.
   const claves = (results ?? []).flatMap((r: any) =>
-    [r.key_thumb, r.key_web, r.key_poster].filter(Boolean) as string[]);
+    [r.key_thumb, r.key_web, r.key_original, r.key_poster].filter(Boolean) as string[]);
   await Promise.all(claves.map((k) => env.MEDIA.delete(k).catch(() => {})));
 
   await env.DB.batch(
@@ -716,6 +796,7 @@ export default {
       }
       if (pathname === '/firmar'      && req.method === 'POST') return await firmar(req, env);
       if (pathname === '/completar'   && req.method === 'POST') return await completar(req, env);
+      if (pathname === '/original'    && req.method === 'POST') return await guardarOriginal(req, env);
       if (pathname === '/borrar'      && req.method === 'POST') return await borrar(req, env);
       // Diagnóstico de subidas que fallan en los móviles: solo se escribe en el
       // log (visible con `wrangler tail`), no se guarda nada.

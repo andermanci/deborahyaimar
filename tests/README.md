@@ -21,5 +21,11 @@ npm test
   No usa mocks: sube una foto de verdad. Ejecutar antes de la boda, y borrar
   después la foto de prueba (nombre «Ensayo Claude») desde el panel de moderación.
 
+> **Ojo con `/original`.** Toda subida en calidad original llama a ese endpoint al
+> terminar. Si un test genera una foto grande y no lo mockea, la petición sale al API
+> **de producción**. Los `public/*.jpg` son pequeños y no producen original; las fotos
+> sintéticas grandes, sí. Y regístralo DESPUÉS de `**/__put/**`: Playwright prueba las
+> rutas de la última a la primera, y `**/original` casaría también con el PUT.
+
 `resiliencia` y `video` usan relojes falsos (`page.clock.install`) para adelantar el
 backoff exponencial sin esperar minutos reales.

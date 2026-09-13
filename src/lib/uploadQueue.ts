@@ -10,6 +10,10 @@
  *    reanuda donde se quedó en vez de empezar de cero.
  *  - Nada se marca como hecho hasta que el servidor lo confirma. Nunca damos
  *    las gracias por una foto que no ha llegado.
+ *  - El original (4-20 MB) se sube EL ÚLTIMO, después de que la foto ya esté
+ *    en la galería. Si la conexión se cae a mitad del original, la foto ya
+ *    está publicada y solo se reintenta el archivo pesado; al revés, un
+ *    original atascado habría impedido que la foto apareciera siquiera.
  */
 
 import type { MedioProcesado } from './media';
@@ -46,6 +50,12 @@ const PLAZO_HUERFANO = 30 * 60_000;
 // usuario cambiara de pestaña o le volviera la cobertura: si se quedaba
 // mirando la pantalla, la cola no se movía nunca.
 const LATIDO = 20_000;
+
+/**
+ * Roles imprescindibles para que la foto exista: se suben antes de insertar la
+ * fila del índice. El 'original' queda fuera a propósito (ver subirOriginal).
+ */
+const ROLES_BASE = ['thumb', 'web', 'poster', 'video'];
 
 export type EstadoItem = 'pendiente' | 'subiendo' | 'hecho' | 'fallido';
 
@@ -93,12 +103,18 @@ export interface ItemCola {
   tipo: 'foto' | 'video';
   nombre: string;
   deviceId: string;
-  blobs: Record<string, Guardado>;  // thumb | web | poster | video
+  blobs: Record<string, Guardado>;  // thumb | web | original | poster | video
   meta: { ancho: number; alto: number; duracion?: number };
   servidorId?: string;
   claves?: Record<string, string>;  // rol -> key en R2
   subidas?: SubidaFirmada[];        // se persiste: al recargar se reanuda sin refirmar
   partes?: { n: number; etag: string }[];
+  /** Roles cuyos bytes ya están en R2. Un reintento no vuelve a subirlos. */
+  rolesHechos?: string[];
+  /** La fila del índice ya está insertada: la foto SE VE en la galería. */
+  completado?: boolean;
+  /** La foto llegó, su original no. No es un fallo: es una foto sin descarga. */
+  sinOriginal?: boolean;
   intentos: number;
   error?: string;
   creado: number;
@@ -127,6 +143,8 @@ export interface ResumenCola {
   fraccion: number;       // 0–1 del total, contando los bytes de lo que sube ahora
   progresoActual?: number; // 0–1 de la foto que está subiendo en este momento
   sinConexion: boolean;   // la cola está parada esperando cobertura
+  sinOriginal: number;    // subidas que llegaron pero sin su copia original
+  guardandoOriginal: number; // ya están en la galería; solo falta el original
   persistente: boolean;   // false = en memoria: cerrar la pestaña pierde lo pendiente
   ultimoError?: string;   // motivo del último fallo, aunque aún esté reintentando
   items: ItemCola[];
@@ -438,6 +456,8 @@ export class ColaSubida {
         : 0,
       progresoActual: [...this.progreso.values()][0],
       sinConexion: !navigator.onLine && items.some((i) => i.estado !== 'hecho'),
+      sinOriginal: items.filter((i) => i.sinOriginal).length,
+      guardandoOriginal: items.filter((i) => i.completado && i.estado !== 'hecho').length,
       persistente: colaPersistente(),
       ultimoError: items.find((i) => i.error && i.estado !== 'hecho')?.error,
       items,
@@ -455,6 +475,8 @@ export class ColaSubida {
     const crudos: Record<string, Blob> = { thumb: medio.thumb };
     if (medio.tipo === 'foto') {
       crudos.web = medio.web;
+      // Último en el orden de inserción, que es el orden en que se sube.
+      if (medio.original) crudos.original = medio.original;
     } else {
       crudos.poster = medio.poster;
       crudos.video = medio.video;
@@ -575,13 +597,28 @@ export class ColaSubida {
       // Safari a veces pierde los archivos guardados en IndexedDB: el blob
       // existe pero no se puede leer, y cada intento falla como «error de red».
       // Mejor detectarlo y decirlo que reintentar para siempre.
-      for (const guardado of Object.values(item.blobs)) {
+      //
+      // El original se comprueba aparte, en su propia fase: si es él el que se
+      // ha perdido, la foto sigue siendo perfectamente subible y no hay que
+      // pedirle al invitado que la vuelva a elegir.
+      for (const [rol, guardado] of Object.entries(item.blobs)) {
+        if (rol === 'original') continue;
         try { await aBlob(guardado).slice(0, 16).arrayBuffer(); }
         catch { throw new DatosPerdidos('Esta foto ya no está disponible en el móvil. Vuelve a elegirla.'); }
       }
       if (!item.servidorId) await this.firmar(item, ctrl.signal);
-      await this.subirBlobs(item, ctrl.signal);
-      await this.completar(item, ctrl.signal);
+
+      // FASE 1: lo que hace falta para que la foto exista en la galería.
+      await this.subirBlobs(item, ROLES_BASE, ctrl.signal);
+      if (!item.completado) {
+        await this.completar(item, ctrl.signal);
+        item.completado = true;
+        await guardar(item);
+      }
+
+      // FASE 2: el original. La foto ya está publicada, así que de aquí en
+      // adelante nada puede hacerla desaparecer.
+      if (item.blobs.original) await this.subirOriginal(item, ctrl.signal);
 
       // Soltar los blobs: ya están en R2 y ocupan MB en el móvil del invitado.
       await guardar({ ...item, estado: 'hecho', blobs: {}, subidas: undefined });
@@ -605,7 +642,12 @@ export class ColaSubida {
       const rendirse = !esRed && intentos >= MAX_INTENTOS;
 
       if (rendirse) {
-        await guardar({ ...item, estado: 'fallido', intentos, error: mensaje });
+        // Si lo único que faltaba era el original, la foto YA está en la
+        // galería: decir «fallida» sería mentir y empujaría al invitado a
+        // subirla otra vez, duplicándola.
+        await guardar(item.completado
+          ? { ...item, estado: 'hecho', blobs: {}, subidas: undefined, sinOriginal: true }
+          : { ...item, estado: 'fallido', intentos, error: mensaje });
       } else {
         // Sin await aquí: si esperásemos dentro del lote, una foto que falla
         // frenaría a las otras dos que van bien.
@@ -652,18 +694,31 @@ export class ColaSubida {
     await guardar(item);
   }
 
-  private async subirBlobs(item: ItemCola, senal?: AbortSignal): Promise<void> {
+  /**
+   * Sube los bytes de los roles indicados.
+   *
+   * Lo ya confirmado se salta: con un original de 15 MB, un corte de red
+   * reintentando el elemento entero volvería a subir la miniatura y la versión
+   * web cada vez. La barra sigue contando sobre el total del elemento (lo ya
+   * subido incluido) para que no retroceda entre fases.
+   */
+  private async subirBlobs(item: ItemCola, roles: string[], senal?: AbortSignal): Promise<void> {
     const subidas = item.subidas;
     if (!subidas?.length) throw new Error('Falta la firma de subida');
 
+    const hechos = new Set(item.rolesHechos ?? []);
     const total = Object.values(item.blobs).reduce((a, g) => a + tamano(g), 0) || 1;
-    let base = 0;
+    let base = Object.entries(item.blobs)
+      .filter(([rol]) => hechos.has(rol))
+      .reduce((a, [, g]) => a + tamano(g), 0);
     const informar = (enviados: number) => {
       this.progreso.set(item.id, Math.min(1, (base + enviados) / total));
       this.avisarProgreso();
     };
+    informar(0);
 
     for (const s of subidas) {
+      if (!roles.includes(s.rol) || hechos.has(s.rol)) continue;
       const guardado = item.blobs[s.rol];
       if (!guardado) continue;
       const blob = aBlob(guardado);
@@ -674,9 +729,68 @@ export class ColaSubida {
         const res = await subirConProgreso(s.url!, blob, blob.type || 'image/webp', senal, informar);
         if (res.status < 200 || res.status >= 300) throw new Error(`Fallo al subir ${s.rol} (${res.status})`);
       }
+      hechos.add(s.rol);
+      item.rolesHechos = [...hechos];
+      await guardar(item);
       base += blob.size;
       informar(0);
     }
+  }
+
+  /**
+   * Sube el original y lo apunta en el índice.
+   *
+   * Llega aquí con la foto YA publicada, así que lo único que puede pasar es
+   * que la galería se quede sin el botón de descarga. Por eso un original que
+   * Safari ha perdido no se trata como un fallo del elemento: se marca y se
+   * sigue. Los errores de red sí se propagan, para que la cola lo reintente
+   * (sin repetir la miniatura ni la versión web).
+   */
+  private async subirOriginal(item: ItemCola, senal?: AbortSignal): Promise<void> {
+    const guardado = item.blobs.original;
+    if (!guardado) return;
+
+    // El servidor no lo ha firmado (formato que rechaza, o demasiado grande):
+    // no hay dónde ponerlo, y hay que decirlo en vez de dar por buena una
+    // descarga que no existirá.
+    if (!item.claves?.original) {
+      item.sinOriginal = true;
+      delete item.blobs.original;
+      await guardar(item);
+      return;
+    }
+
+    try { await aBlob(guardado).slice(0, 16).arrayBuffer(); }
+    catch {
+      item.sinOriginal = true;
+      delete item.blobs.original;
+      await guardar(item);
+      return;
+    }
+
+    await this.subirBlobs(item, ['original'], senal);
+    await this.registrarOriginal(item, senal);
+  }
+
+  /**
+   * Apunta la clave del original en la fila del índice. Hasta que esto no
+   * vuelve bien, la galería no ofrece la descarga: mejor sin botón que con un
+   * botón que da 404.
+   */
+  private async registrarOriginal(item: ItemCola, senal?: AbortSignal): Promise<void> {
+    const key = item.claves?.original;
+    if (!key) return;
+    const res = await fetchConPlazo(`${this.api}/original`, {
+      method: 'POST',
+      headers: this.cabeceras(item),
+      body: JSON.stringify({
+        id: item.servidorId,
+        device_id: item.deviceId,
+        key_original: key,
+        origen: item.opciones?.origen,
+      }),
+    }, PLAZO_API, senal);
+    if (!res.ok) throw new Error(`No se pudo guardar el original (${res.status})`);
   }
 
   /**

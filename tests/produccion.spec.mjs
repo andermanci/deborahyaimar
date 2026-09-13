@@ -9,10 +9,12 @@ const mal = (m) => { fallos.push(m); console.log(`  ✗ ${m}`); };
 /** El nombre se pide una vez, en una hoja, después de elegir los archivos. */
 async function rellenarNombre(pg, nombre) {
   const hoja = pg.locator('.hoja.abierta');
-  if (await hoja.count()) {
-    await pg.fill('#nombreInput', nombre);
-    await pg.click('#hojaBoton');
-  }
+  if (!(await hoja.count())) return;
+  // El nombre solo se pide la primera vez. A partir de ahí la hoja sigue
+  // apareciendo, pero solo para elegir la calidad y confirmar la subida.
+  const campo = pg.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill(nombre);
+  await pg.click('#hojaBoton');
 }
 
 const nav = await chromium.launch({ channel: 'chrome' });

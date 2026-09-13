@@ -9,10 +9,12 @@ const mal = (m) => { fallos.push(m); console.log(`  ✗ ${m}`); };
 /** El nombre se pide una vez, en una hoja, después de elegir los archivos. */
 async function rellenarNombre(pg, nombre) {
   const hoja = pg.locator('.hoja.abierta');
-  if (await hoja.count()) {
-    await pg.fill('#nombreInput', nombre);
-    await pg.click('#hojaBoton');
-  }
+  if (!(await hoja.count())) return;
+  // El nombre solo se pide la primera vez. A partir de ahí la hoja sigue
+  // apareciendo, pero solo para elegir la calidad y confirmar la subida.
+  const campo = pg.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill(nombre);
+  await pg.click('#hojaBoton');
 }
 
 const navegador = await chromium.launch({ channel: 'chrome' });
@@ -128,13 +130,21 @@ await page.reload({ waitUntil: 'networkidle' });
 const guardado = await page.evaluate(() => localStorage.getItem('ad-nombre'));
 guardado === 'Ander' ? ok('el nombre queda guardado') : mal(`guardó "${guardado}"`);
 
-// Al elegir más archivos NO debe reaparecer la hoja: se sube directo.
+// La hoja SÍ reaparece (es donde se elige la calidad y se ve el peso), pero
+// ya no pregunta quién eres.
 firmadoCon = null;
 await page.setInputFiles('#selector', { name: 'otra.jpg', mimeType: 'image/jpeg', buffer: readFileSync('public/foto3.jpg') });
-await page.waitForTimeout(1500);
-(await page.locator('.hoja.abierta').count()) === 0
-  ? ok('no vuelve a pedir el nombre: sube directo')
-  : mal('volvió a pedir el nombre');
+await page.waitForTimeout(600);
+(await page.locator('.hoja.abierta').count()) === 1
+  ? ok('la hoja se abre para confirmar la subida')
+  : mal('la hoja no se abrió');
+(await page.locator('#nombreInput').isVisible())
+  ? mal('volvió a pedir el nombre')
+  : ok('no vuelve a pedir el nombre');
+(await page.locator('#hojaBoton').textContent()).includes('Subir')
+  ? ok('el botón dice qué se va a subir')
+  : mal(`el botón dice "${await page.locator('#hojaBoton').textContent()}"`);
+await page.click('#hojaBoton');
 await page.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 20000 })
   .then(() => ok('la segunda subida se completa en un solo toque'))
   .catch(() => mal('la segunda subida no completó'));
@@ -356,7 +366,11 @@ console.log('\n12) Foto de noche con mucho grano (las de la fiesta)');
     const input = document.getElementById('selector'); input.files = dt.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   });
-  if (await p5.locator('.hoja.abierta').count()) { await p5.fill('#nombreInput', 'Ander'); await p5.click('#hojaBoton'); }
+  if (await p5.locator('.hoja.abierta').count()) {
+  const campo = p5.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill('Ander');
+  await p5.click('#hojaBoton');
+}
   await p5.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 90000 })
     .then(() => ok('la foto con grano se sube sin fallar')).catch(() => mal('falló la foto con grano'));
   const web = firmado?.archivos?.find((a) => a.rol === 'web');
@@ -365,6 +379,263 @@ console.log('\n12) Foto de noche con mucho grano (las de la fiesta)');
     : mal(`peso fuera de tope: ${web?.size}`);
   completado?.ancho ? ok(`se guardó a ${completado.ancho}×${completado.alto}`) : mal('sin dimensiones');
   await p5.close();
+}
+
+// ── 13. Calidad original: tres versiones y botón de descarga ─────────
+console.log('\n13) Subir en calidad original');
+{
+  const p6 = await ctx.newPage();
+  p6.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  let firmado = null, originalRegistrado = null;
+  const puestos = [];
+  const subidoAlIndice = [];
+
+  await p6.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p6.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify({ items: subidoAlIndice }) }));
+  await p6.route('**/firmar', async (r) => {
+    firmado = JSON.parse(r.request().postData());
+    const subidas = firmado.archivos.map((a) => ({
+      rol: a.rol,
+      key: `invitados/o/${a.rol}.${a.contentType.split('/')[1]}`,
+      url: `${BASE}/__put/${a.rol}`,
+    }));
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'o', subidas }) });
+  });
+  await p6.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+  // Si esta ruta no existiera, la petición saldría al API DE VERDAD.
+  await p6.route('**/original', async (r) => {
+    originalRegistrado = JSON.parse(r.request().postData());
+    // A partir de aquí el índice ya tiene la foto, con su original.
+    subidoAlIndice.push({
+      id: 'o', tipo: 'foto', categoria: null, nombre: 'Ander', deviceHash: 'x',
+      thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`,
+      original: `${BASE}/foto3.jpg`, poster: null,
+      duracion: null, ancho: 3072, alto: 2048, ts: 9,
+    });
+    await r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' });
+  });
+  // Después de `**/original` a propósito: Playwright prueba las rutas de la
+  // última a la primera, y `**/original` casaría también con /__put/original.
+  await p6.route('**/__put/**', (r) => {
+    puestos.push(r.request().url().split('/').pop());
+    return r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' });
+  });
+
+  await p6.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+
+  // Una foto de móvil de verdad: 4536×3024 con grano, que pesa mucho más que
+  // su versión web. Las fotos de `public/` ya vienen comprimidas para la web y
+  // el original se descartaría por no aportar nada.
+  await p6.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 4536; c.height = 3024;
+    const g = c.getContext('2d');
+    const img = await createImageBitmap(await (await fetch('/foto.jpg')).blob());
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const d = g.getImageData(0, 0, c.width, c.height);
+    for (let i = 0; i < d.data.length; i += 4) {
+      const r = (Math.random() - 0.5) * 70;
+      d.data[i] += r; d.data[i + 1] += r; d.data[i + 2] += r;
+    }
+    g.putImageData(d, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.95));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'IMG_0042.jpg', { type: 'image/jpeg' }));
+    document.getElementById('selector').files = dt.files;
+    document.getElementById('selector').dispatchEvent(new Event('change'));
+  });
+
+  await p6.waitForSelector('.hoja.abierta', { timeout: 10000 });
+  (await p6.locator('#calidad').isVisible()) ? ok('ofrece elegir la calidad') : mal('no ofrece elegir calidad');
+  (await p6.locator('#opcOriginal').getAttribute('aria-checked')) === 'true'
+    ? ok('viene marcada la original por defecto')
+    : mal('la opción por defecto no es la original');
+  const peso = await p6.locator('#pesoOriginal').textContent();
+  /\d+\s*MB/.test(peso) ? ok(`avisa del peso antes de subir: "${peso.trim()}"`) : mal(`peso no calculado: "${peso}"`);
+
+  const campo = p6.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill('Ander');
+  await p6.click('#hojaBoton');
+
+  await p6.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 60000 })
+    .then(() => ok('la subida termina bien')).catch(() => mal('no terminó la subida'));
+
+  const roles = (firmado?.archivos ?? []).map((a) => a.rol).sort();
+  JSON.stringify(roles) === JSON.stringify(['original', 'thumb', 'web'])
+    ? ok('pide firma para las tres versiones')
+    : mal(`pidió firma para ${JSON.stringify(roles)}`);
+
+  const orig = firmado?.archivos?.find((a) => a.rol === 'original');
+  const web = firmado?.archivos?.find((a) => a.rol === 'web');
+  orig && orig.size > web.size
+    ? ok(`el original (${(orig.size / 1024 / 1024).toFixed(1)} MB) pesa más que la web (${(web.size / 1024 / 1024).toFixed(1)} MB)`)
+    : mal('el original no es mayor que la versión web');
+
+  // El orden importa: si el original fuera antes, un corte de red dejaría la
+  // foto sin publicar.
+  puestos.indexOf('original') === puestos.length - 1
+    ? ok('el original se sube el último, con la foto ya publicada')
+    : mal(`orden de subida inesperado: ${puestos.join(' → ')}`);
+
+  originalRegistrado?.key_original === 'invitados/o/original.jpeg'
+    ? ok('registra el original en el índice')
+    : mal(`no registró el original: ${JSON.stringify(originalRegistrado)}`);
+
+  // Y la galería lo ofrece.
+  await p6.waitForSelector('.tarjeta', { timeout: 15000 });
+  await p6.click('.tarjeta');
+  await p6.waitForSelector('.visor.abierto', { timeout: 5000 });
+  (await p6.locator('#visorDescargarTexto').textContent()).includes('original')
+    ? ok('el visor ofrece descargar el original')
+    : mal('el visor no ofrece el original');
+
+  await p6.close();
+}
+
+// ── 14. Modo ligero: solo dos versiones ──────────────────────────────
+console.log('\n14) Subir en modo ligero');
+{
+  const p7 = await ctx.newPage();
+  p7.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  let firmado = null;
+  let pidioOriginal = false;
+
+  await p7.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p7.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await p7.route('**/firmar', async (r) => {
+    firmado = JSON.parse(r.request().postData());
+    const subidas = firmado.archivos.map((a) => ({ rol: a.rol, key: `invitados/l/${a.rol}.webp`, url: `${BASE}/__put/${a.rol}` }));
+    await r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'l', subidas }) });
+  });
+  await p7.route('**/completar', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }));
+  await p7.route('**/original', (r) => { pidioOriginal = true; return r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true}' }); });
+  await p7.route('**/__put/**', (r) => r.fulfill({ status: 200, headers: { ETag: '"e"' }, body: '' }));
+
+  await p7.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p7.evaluate(async () => {
+    const c = document.createElement('canvas'); c.width = 4000; c.height = 3000;
+    const g = c.getContext('2d');
+    const img = await createImageBitmap(await (await fetch('/foto.jpg')).blob());
+    g.drawImage(img, 0, 0, c.width, c.height);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.95));
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'IMG_0043.jpg', { type: 'image/jpeg' }));
+    document.getElementById('selector').files = dt.files;
+    document.getElementById('selector').dispatchEvent(new Event('change'));
+  });
+
+  await p7.waitForSelector('.hoja.abierta', { timeout: 10000 });
+  await p7.click('#opcLigera');
+  (await p7.locator('#opcLigera').getAttribute('aria-checked')) === 'true'
+    ? ok('se puede cambiar a la versión ligera')
+    : mal('no se marcó la opción ligera');
+
+  const campo = p7.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill('Ander');
+  await p7.click('#hojaBoton');
+  await p7.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 60000 })
+    .then(() => ok('la subida ligera termina bien')).catch(() => mal('no terminó la subida ligera'));
+
+  const roles = (firmado?.archivos ?? []).map((a) => a.rol).sort();
+  JSON.stringify(roles) === JSON.stringify(['thumb', 'web'])
+    ? ok('solo sube thumb y web: nada de original')
+    : mal(`pidió firma para ${JSON.stringify(roles)}`);
+  pidioOriginal ? mal('llamó a /original sin haberlo subido') : ok('no registra ningún original');
+
+  // La elección se recuerda para la siguiente vez.
+  (await p7.evaluate(() => localStorage.getItem('ad-calidad'))) === 'ligera'
+    ? ok('recuerda la elección')
+    : mal('no recordó la elección');
+
+  await p7.close();
+}
+
+// ── 15. Tira de miniaturas del visor ─────────────────────────────────
+console.log('\n15) Moverse entre fotos desde el visor');
+{
+  const muchas = Array.from({ length: 12 }, (_, i) => ({
+    id: `t${i}`, tipo: 'foto', categoria: null, nombre: `Invitado ${i}`, deviceHash: 'ajena0000000',
+    thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto3.jpg`, original: null, poster: null,
+    duracion: null, ancho: 1200, alto: 800, ts: 100 - i,
+  }));
+
+  const p8 = await ctx.newPage();
+  p8.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await p8.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p8.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify(r.request().url().includes('oficial') ? { items: [] } : { items: muchas }) }));
+  await p8.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p8.waitForSelector('.tarjeta');
+
+  await p8.locator('.tarjeta').first().click();
+  await p8.waitForSelector('.visor.abierto');
+
+  (await p8.locator('.tira-item').count()) === 12
+    ? ok('la tira lista las 12 fotos')
+    : mal(`la tira tiene ${await p8.locator('.tira-item').count()} miniaturas`);
+  (await p8.locator('#visorPos').textContent())?.trim() === '1 / 12'
+    ? ok('dice en qué foto estás')
+    : mal(`el contador dice "${await p8.locator('#visorPos').textContent()}"`);
+
+  // Las miniaturas son las MISMAS que las de la rejilla: si cambiaran, la tira
+  // costaría una descarga por foto en vez de salir del caché.
+  const enTira = await p8.locator('.tira-item img').first().getAttribute('src');
+  const enRejilla = await p8.locator('.tarjeta img').first().getAttribute('src');
+  enTira === enRejilla ? ok('reutiliza las miniaturas ya descargadas') : mal('la tira usa otras imágenes');
+
+  // Saltar a una foto lejana de un toque.
+  await p8.locator('.tira-item').nth(7).click();
+  await p8.waitForTimeout(400);
+  (await p8.locator('#visorPos').textContent())?.trim() === '8 / 12'
+    ? ok('tocar una miniatura salta a esa foto')
+    : mal(`saltó a "${await p8.locator('#visorPos').textContent()}"`);
+  (await p8.locator('.tira-item').nth(7).getAttribute('class'))?.includes('activa')
+    ? ok('la miniatura activa queda marcada')
+    : mal('no marcó la miniatura activa');
+
+  // Y al pasar de foto con el teclado, la tira sigue.
+  await p8.keyboard.press('ArrowRight');
+  await p8.waitForTimeout(400);
+  (await p8.locator('#visorPos').textContent())?.trim() === '9 / 12'
+    ? ok('las flechas siguen pasando de foto')
+    : mal(`tras la flecha: "${await p8.locator('#visorPos').textContent()}"`);
+  (await p8.locator('.tira-item').nth(8).getAttribute('class'))?.includes('activa')
+    ? ok('la tira acompaña al cambio de foto')
+    : mal('la tira se quedó atrás');
+
+  // La foto no puede desbordar y taparlo todo: fue el fallo del primer intento.
+  const encaja = await p8.evaluate(() => {
+    const img = document.querySelector('#visorSlot img');
+    const tira = document.getElementById('visorTira');
+    if (!img || !tira) return false;
+    return img.getBoundingClientRect().bottom <= tira.getBoundingClientRect().top + 1;
+  });
+  encaja ? ok('la foto no invade la tira') : mal('la foto desborda por debajo y tapa la tira');
+
+  await p8.close();
+}
+
+// ── 16. Con una sola foto no hay nada entre lo que moverse ───────────
+console.log('\n16) Una sola foto: sin tira ni contador');
+{
+  const una = [{
+    id: 'sola', tipo: 'foto', categoria: null, nombre: 'Ander', deviceHash: 'ajena0000000',
+    thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto3.jpg`, original: null, poster: null,
+    duracion: null, ancho: 1200, alto: 800, ts: 1,
+  }];
+  const p9 = await ctx.newPage();
+  p9.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await p9.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p9.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify(r.request().url().includes('oficial') ? { items: [] } : { items: una }) }));
+  await p9.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await p9.waitForSelector('.tarjeta');
+  await p9.locator('.tarjeta').first().click();
+  await p9.waitForSelector('.visor.abierto');
+
+  (await p9.locator('#visorTira').isHidden()) ? ok('no enseña la tira') : mal('enseña una tira de una sola foto');
+  (await p9.locator('#visorPos').textContent())?.trim() === '' ? ok('no enseña «1 / 1»') : mal('enseña un contador inútil');
+  await p9.close();
 }
 
 await navegador.close();

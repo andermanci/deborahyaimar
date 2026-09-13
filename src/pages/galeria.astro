@@ -252,16 +252,65 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       border: none; border-radius: 100px; padding: 1rem; cursor: pointer;
     }
     .hoja-boton:disabled { opacity: 0.35; }
+    .hoja-input[hidden] { display: none !important; }
+
+    /* ── ELEGIR CALIDAD ────────────────────────────────────────────
+       Se enseña cada vez que se eligen fotos, no una sola vez: la cobertura
+       cambia a lo largo del día y aquí se ve lo que va a pesar la subida
+       ANTES de lanzarla. */
+    .calidad { display: flex; flex-direction: column; gap: var(--s2); margin-bottom: var(--s4); }
+    .calidad[hidden] { display: none !important; }
+    .calidad-titulo {
+      font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--gray); text-align: center; margin-bottom: var(--s1);
+    }
+    .opcion {
+      display: flex; align-items: flex-start; gap: var(--s3); width: 100%;
+      font-family: inherit; text-align: left; cursor: pointer;
+      background: #fff; border: 1px solid var(--border); border-radius: 14px;
+      padding: 0.85rem 0.95rem; transition: border-color 0.2s, background 0.2s;
+    }
+    .opcion[aria-checked="true"] { border-color: var(--pink); background: #fffdfb; }
+    .opcion-marca {
+      flex: none; width: 17px; height: 17px; margin-top: 2px; border-radius: 50%;
+      border: 1.5px solid var(--rose); position: relative;
+    }
+    .opcion[aria-checked="true"] .opcion-marca { border-color: var(--pink-deep); }
+    .opcion[aria-checked="true"] .opcion-marca::after {
+      content: ''; position: absolute; inset: 3px; border-radius: 50%; background: var(--pink-deep);
+    }
+    .opcion-cuerpo { display: flex; flex-direction: column; gap: 0.18rem; min-width: 0; }
+    .opcion-nombre { font-size: 0.88rem; font-weight: 400; color: var(--dark); }
+    .opcion-detalle { font-size: 0.72rem; line-height: 1.5; color: var(--gray); }
+    .opcion-peso { font-size: 0.68rem; color: var(--pink-deep); letter-spacing: 0.04em; }
+    .calidad-aviso {
+      font-size: 0.7rem; line-height: 1.5; color: var(--pink-deep);
+      text-align: center; margin-top: var(--s1);
+    }
+    .calidad-aviso[hidden] { display: none !important; }
 
     /* ── VISOR ─────────────────────────────────────────────────────── */
     .visor {
       position: fixed; inset: 0; z-index: 300; display: none;
-      background: rgba(12,6,9,0.97); align-items: center; justify-content: center;
+      background: rgba(12,6,9,0.97); flex-direction: column;
       touch-action: pan-y;
     }
     .visor.abierto { display: flex; animation: aparecer 0.25s ease both; }
     @keyframes aparecer { from { opacity: 0 } to { opacity: 1 } }
-    .visor img, .visor video { max-width: 100vw; max-height: 100dvh; object-fit: contain; }
+    /* min-height:0 es lo que deja que la foto encoja: sin esto el contenido
+       fuerza el alto del flex y la tira se sale de la pantalla. */
+    .visor-escena {
+      position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    /* Alto DEFINIDO (100% de una escena que ya lo tiene), no automático: con
+       alto automático el `max-height:100%` de la foto es circular, el navegador
+       lo ignora y la imagen desborda por debajo tapando la tira y el pie. */
+    #visorSlot {
+      height: 100%; width: 100%; min-width: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .visor img, .visor video { max-width: 100%; max-height: 100%; object-fit: contain; }
     .visor-cerrar, .visor-ant, .visor-sig {
       position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px);
       border: none; color: #fff; cursor: pointer; border-radius: 50%;
@@ -274,10 +323,37 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     .visor-ant { left: var(--s3); } .visor-sig { right: var(--s3); }
     @media (max-width: 640px) { .visor-ant, .visor-sig { display: none; } }
     .visor-pie {
-      position: absolute; bottom: calc(var(--s5) + env(safe-area-inset-bottom, 0px));
-      left: 0; right: 0; text-align: center;
+      flex: none; text-align: center;
+      padding: var(--s3) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom, 0px));
       color: rgba(255,255,255,0.8); font-size: 0.74rem; letter-spacing: 0.1em;
       display: flex; flex-direction: column; gap: var(--s2); align-items: center;
+    }
+    .visor-pos { font-size: 0.6rem; letter-spacing: 0.16em; color: rgba(255,255,255,0.45); }
+
+    /* ── TIRA DE MINIATURAS ────────────────────────────────────────
+       Las imágenes son las MISMAS que las de la rejilla, así que salen del
+       caché del navegador: la tira no cuesta ni una petición. */
+    .visor-tira {
+      flex: none; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden;
+      padding: var(--s2) var(--s4); scrollbar-width: none;
+      /* La galería entera está en `pan-y` para que deslizar cambie de foto.
+         Aquí hace falta lo contrario, o la tira no se puede recorrer. */
+      touch-action: pan-x;
+      -webkit-overflow-scrolling: touch;
+    }
+    .visor-tira::-webkit-scrollbar { display: none; }
+    .visor-tira[hidden] { display: none !important; }
+    .tira-item {
+      flex: none; width: 46px; height: 46px; padding: 0; border: none; cursor: pointer;
+      border-radius: 7px; overflow: hidden; background: rgba(255,255,255,0.08);
+      opacity: 0.45; transition: opacity 0.2s, outline-color 0.2s;
+      outline: 1.5px solid transparent; outline-offset: -1.5px;
+    }
+    .tira-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .tira-item.activa { opacity: 1; outline-color: #fff; }
+    @media (min-width: 640px) {
+      .tira-item { width: 58px; height: 58px; }
+      .visor-tira { justify-content: safe center; padding-bottom: var(--s3); }
     }
     .visor-borrar {
       font-family: inherit; font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase;
@@ -285,6 +361,17 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       text-decoration: underline; text-underline-offset: 3px;
     }
     .visor-borrar[hidden] { display: none !important; }
+    .visor-acciones { display: flex; align-items: center; justify-content: center; gap: var(--s4); }
+    .visor-descargar {
+      font-family: inherit; font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);
+      border: none; border-radius: 100px; color: #fff; cursor: pointer;
+      padding: 0.55rem 1.1rem; transition: background 0.2s;
+    }
+    .visor-descargar:hover { background: rgba(255,255,255,0.24); }
+    .visor-descargar:disabled { opacity: 0.6; cursor: default; }
+    .visor-descargar svg { width: 13px; height: 13px; }
 
     /* ── AVISO FLOTANTE ────────────────────────────────────────────── */
     .aviso {
@@ -398,20 +485,56 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
   <div class="hoja" id="hoja" role="dialog" aria-modal="true" aria-labelledby="hojaTitulo">
     <div class="hoja-tirador"></div>
     <h2 class="hoja-titulo" id="hojaTitulo">¿Quién eres?</h2>
-    <p class="hoja-texto">Para que Aimar y Deborah sepan de quién es cada foto.</p>
+    <p class="hoja-texto" id="hojaTexto">Para que Aimar y Deborah sepan de quién es cada foto.</p>
     <input class="hoja-input" type="text" id="nombreInput" placeholder="Tu nombre" autocomplete="name" enterkeyhint="done" />
+
+    <div class="calidad" id="calidad" role="radiogroup" aria-label="Calidad de subida">
+      <span class="calidad-titulo">Cómo subirlas</span>
+      <button class="opcion" type="button" id="opcOriginal" role="radio" data-calidad="original" aria-checked="true">
+        <span class="opcion-marca"></span>
+        <span class="opcion-cuerpo">
+          <span class="opcion-nombre">Calidad original</span>
+          <span class="opcion-detalle">La foto tal cual la hizo tu móvil, para guardar e imprimir.</span>
+          <span class="opcion-peso" id="pesoOriginal"></span>
+        </span>
+      </button>
+      <button class="opcion" type="button" id="opcLigera" role="radio" data-calidad="ligera" aria-checked="false">
+        <span class="opcion-marca"></span>
+        <span class="opcion-cuerpo">
+          <span class="opcion-nombre">Más ligera</span>
+          <span class="opcion-detalle">En la galería se ve igual, pero sin copia original descargable.</span>
+          <span class="opcion-peso" id="pesoLigera"></span>
+        </span>
+      </button>
+      <p class="calidad-aviso" id="calidadAviso" hidden></p>
+    </div>
+
     <button class="hoja-boton" id="hojaBoton">Continuar</button>
   </div>
 
   <!-- VISOR -->
   <div class="visor" id="visor" role="dialog" aria-modal="true">
     <button class="visor-cerrar" id="visorCerrar" aria-label="Cerrar">✕</button>
-    <button class="visor-ant" id="visorAnt" aria-label="Anterior">‹</button>
-    <div id="visorSlot"></div>
-    <button class="visor-sig" id="visorSig" aria-label="Siguiente">›</button>
+    <div class="visor-escena" id="visorEscena">
+      <button class="visor-ant" id="visorAnt" aria-label="Anterior">‹</button>
+      <div id="visorSlot"></div>
+      <button class="visor-sig" id="visorSig" aria-label="Siguiente">›</button>
+    </div>
+    <div class="visor-tira" id="visorTira" role="tablist" aria-label="Todas las fotos" hidden></div>
     <div class="visor-pie">
+      <span class="visor-pos" id="visorPos"></span>
       <span id="visorQuien"></span>
-      <button class="visor-borrar" id="visorBorrar" hidden>Borrar mi foto</button>
+      <div class="visor-acciones">
+        <button class="visor-descargar" id="visorDescargar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="7 10 12 15 17 10" />
+            <line x1="12" y1="15" x2="12" y2="3" />
+          </svg>
+          <span id="visorDescargarTexto">Descargar</span>
+        </button>
+        <button class="visor-borrar" id="visorBorrar" hidden>Borrar mi foto</button>
+      </div>
     </div>
   </div>
 
@@ -419,6 +542,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 
 <script>
   import { procesar, ErrorMedio } from '../lib/media';
+  import type { Calidad } from '../lib/media';
   import { ColaSubida } from '../lib/uploadQueue';
 
   const API = import.meta.env.PUBLIC_API_BASE ?? '';
@@ -452,6 +576,8 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     id: string; tipo: 'foto' | 'video'; categoria: string | null;
     nombre: string; deviceHash: string;
     thumb: string; web: string; poster: string | null;
+    /** Copia tal cual salió del móvil. null si se subió en modo ligero. */
+    original: string | null;
     duracion: number | null; ancho: number; alto: number; ts: number;
   }
 
@@ -635,11 +761,69 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     const slot = $('visorSlot');
     let visorId: string | null = null;
 
+    const tira = $('visorTira');
+    const nodosTira = new Map<string, HTMLElement>();
+    let tiraFirma = '';
+
+    /**
+     * Tira de miniaturas del visor.
+     *
+     * Usa las MISMAS imágenes que la rejilla, así que sale entera del caché del
+     * navegador: no cuesta ni una petición. Está para saber dónde estás dentro
+     * del álbum y para saltar varias fotos de golpe, que con 50 fotos deslizar
+     * una a una se hace largo.
+     */
+    function pintarTira(instantaneo = false) {
+      const items = visibles();
+      (tira as HTMLElement).hidden = items.length < 2;
+      if (items.length < 2) return;
+
+      // Se reconstruye solo si ha cambiado la lista: llegan fotos nuevas cada
+      // 30 s, y rehacerla en cada repintado perdería la posición del scroll y
+      // volvería a montar 50 nodos por nada.
+      const firma = items.map((i) => i.id).join(',');
+      if (firma !== tiraFirma) {
+        tiraFirma = firma;
+        nodosTira.clear();
+        tira.replaceChildren();
+        for (const it of items) {
+          const b = document.createElement('button');
+          b.className = 'tira-item';
+          b.type = 'button';
+          b.setAttribute('role', 'tab');
+          b.setAttribute('aria-label', it.nombre ? `Foto de ${it.nombre}` : 'Foto de la boda');
+          const img = document.createElement('img');
+          img.src = it.thumb;
+          img.loading = 'lazy';
+          img.decoding = 'async';
+          img.alt = '';
+          b.appendChild(img);
+          b.addEventListener('click', () => { visorId = it.id; pintarVisor(); });
+          tira.appendChild(b);
+          nodosTira.set(it.id, b);
+        }
+      }
+
+      for (const [id, nodo] of nodosTira) {
+        const activa = id === visorId;
+        nodo.classList.toggle('activa', activa);
+        nodo.setAttribute('aria-selected', String(activa));
+        if (!activa) continue;
+        // Centrado a mano en vez de scrollIntoView: ese además arrastra a los
+        // ancestros, y aquí el ancestro es la página entera detrás del visor.
+        // Al abrir se coloca de golpe; al pasar de foto, con animación.
+        const centro = nodo.offsetLeft + nodo.offsetWidth / 2 - tira.clientWidth / 2;
+        tira.scrollTo({ left: Math.max(0, centro), behavior: instantaneo ? 'auto' : 'smooth' });
+      }
+    }
+
     function abrirVisor(id: string) {
       visorId = id;
-      pintarVisor();
+      // El orden importa: sobre un elemento en display:none no se puede hacer
+      // scroll, y la tira se quedaba clavada en la primera foto.
       visor.classList.add('abierto');
       document.body.style.overflow = 'hidden';
+      pintarVisor(true);
     }
     function cerrarVisor() {
       visor.classList.remove('abierto');
@@ -647,10 +831,13 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       document.body.style.overflow = '';
       visorId = null;
     }
-    function pintarVisor() {
+    function pintarVisor(instantaneo = false) {
       const items = visibles();
       const item = items.find((i) => i.id === visorId);
       if (!item) { cerrarVisor(); return; }
+      // «12 / 53»: con 50 fotos, deslizar sin saber cuántas quedan es a ciegas.
+      const puesto = items.indexOf(item) + 1;
+      $('visorPos').textContent = items.length > 1 ? `${puesto} / ${items.length}` : '';
       slot.replaceChildren();
       if (item.tipo === 'video') {
         const v = document.createElement('video');
@@ -665,7 +852,76 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       }
       $('visorQuien').textContent = item.nombre ?? '';
       ($('visorBorrar') as HTMLElement).hidden = !esMia(item);
+      // Se dice QUÉ se descarga: las subidas en modo ligero no tienen original,
+      // y prometer uno que no existe es peor que no ofrecerlo.
+      $('visorDescargarTexto').textContent =
+        item.tipo === 'video' ? 'Descargar vídeo'
+        : item.original ? 'Descargar original'
+        : 'Descargar';
+      pintarTira(instantaneo);
     }
+
+    /**
+     * Descarga la mejor versión disponible: el original si se subió, y si no la
+     * versión web (que también da para imprimir en 20x30).
+     *
+     * No sirve un <a download> apuntando al bucket: el atributo `download` se
+     * IGNORA entre dominios distintos, y los medios viven en otro dominio, así
+     * que el navegador abriría la foto en lugar de guardarla. Hay que traerse
+     * los bytes y crear un blob del propio origen.
+     *
+     * En el móvil se intenta primero la hoja de compartir: es la única vía por
+     * la que la foto acaba en el carrete y no en una carpeta de descargas.
+     */
+    async function descargar(item: Item): Promise<void> {
+      const url = item.original ?? item.web;
+      const ext = url.split('?')[0]!.split('.').pop() || 'jpg';
+      const quien = (item.nombre || 'boda').replace(/[^\p{L}\p{N}]+/gu, '-').toLowerCase();
+      const nombre = `AimarDeborah-${quien}-${item.id.slice(0, 8)}.${ext}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(String(res.status));
+      const blob = await res.blob();
+
+      const archivo = new File([blob], nombre, { type: blob.type || 'application/octet-stream' });
+      if (navigator.canShare?.({ files: [archivo] })) {
+        try {
+          await navigator.share({ files: [archivo] });
+          return;
+        } catch (err) {
+          // Cerrar la hoja de compartir no es un fallo. Cualquier otro motivo
+          // (iOS la bloquea si ha pasado mucho desde el toque) cae a la
+          // descarga normal, que siempre funciona.
+          if ((err as Error)?.name === 'AbortError') return;
+        }
+      }
+
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = href;
+      a.download = nombre;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(href), 20_000);
+    }
+
+    $('visorDescargar').addEventListener('click', async () => {
+      const item = visibles().find((i) => i.id === visorId);
+      if (!item) return;
+
+      const boton = $('visorDescargar') as HTMLButtonElement;
+      const etiqueta = $('visorDescargarTexto');
+      const antes = etiqueta.textContent ?? 'Descargar';
+      boton.disabled = true;
+      etiqueta.textContent = 'Preparando…';
+      try {
+        await descargar(item);
+      } catch {
+        avisar('No se pudo descargar. Inténtalo de nuevo.');
+      } finally {
+        boton.disabled = false;
+        etiqueta.textContent = antes;
+      }
+    });
     function paso(dir: number) {
       const items = visibles();
       const i = items.findIndex((x) => x.id === visorId);
@@ -677,16 +933,27 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     $('visorCerrar').addEventListener('click', cerrarVisor);
     $('visorAnt').addEventListener('click', () => paso(-1));
     $('visorSig').addEventListener('click', () => paso(1));
-    visor.addEventListener('click', (e) => { if (e.target === visor) cerrarVisor(); });
+    // El hueco alrededor de la foto ya no es el propio visor: con la tira
+    // debajo, la foto vive dentro de `.visor-escena`.
+    visor.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t === visor || t.id === 'visorEscena' || t.id === 'visorSlot') cerrarVisor();
+    });
     document.addEventListener('keydown', (e) => {
       if (!visor.classList.contains('abierto')) return;
       if (e.key === 'Escape') cerrarVisor();
       if (e.key === 'ArrowLeft') paso(-1);
       if (e.key === 'ArrowRight') paso(1);
     });
-    let x0 = 0, y0 = 0;
-    visor.addEventListener('touchstart', (e) => { x0 = e.touches[0]!.clientX; y0 = e.touches[0]!.clientY; }, { passive: true });
+    let x0 = 0, y0 = 0, gestoValido = false;
+    visor.addEventListener('touchstart', (e) => {
+      // Recorrer la tira es un gesto horizontal igual que pasar de foto: si no
+      // se distinguen, arrastrar la tira salta tres imágenes de golpe.
+      gestoValido = !(e.target as HTMLElement).closest?.('.visor-tira');
+      x0 = e.touches[0]!.clientX; y0 = e.touches[0]!.clientY;
+    }, { passive: true });
     visor.addEventListener('touchend', (e) => {
+      if (!gestoValido) return;
       const dx = e.changedTouches[0]!.clientX - x0;
       const dy = e.changedTouches[0]!.clientY - y0;
       if (Math.abs(dy) > 90 && Math.abs(dy) > Math.abs(dx)) { cerrarVisor(); return; }
@@ -866,37 +1133,138 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     $('fab').addEventListener('click', abrirSelector);
     $('vacioBoton').addEventListener('click', abrirSelector);
 
+    // ── CALIDAD DE SUBIDA ─────────────────────────────────────────
+    // Por defecto, original: la boda ya ha pasado y lo que se sube ahora se
+    // sube para guardarlo. Quien tenga mala conexión lo cambia en un toque, y
+    // la elección se recuerda para la próxima vez.
+    const LLAVE_CALIDAD = 'ad-calidad';
+    let calidad: Calidad = localStorage.getItem(LLAVE_CALIDAD) === 'ligera' ? 'ligera' : 'original';
+
+    const MB = 1024 * 1024;
+    // Lo que pesa una versión web ya comprimida: ~0,65 MB en Android (webp) y
+    // ~1 MB en iPhone (jpeg, que Safari no sabe evitar). Se estima por lo alto.
+    const PESO_WEB = 1 * MB;
+
+    function enMB(bytes: number): string {
+      if (bytes >= 1024 * MB) return `${(bytes / (1024 * MB)).toFixed(1)} GB`;
+      if (bytes >= MB) return `${Math.round(bytes / MB)} MB`;
+      return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+    }
+
+    const esVideo = (f: File) => f.type.startsWith('video/');
+
+    /** «8 fotos», «3 fotos y 1 vídeo»… para que se vea qué se va a subir. */
+    function resumenSeleccion(): string {
+      const fotos = pendientes.filter((f) => !esVideo(f)).length;
+      const videos = pendientes.length - fotos;
+      const partes: string[] = [];
+      if (fotos) partes.push(fotos === 1 ? '1 foto' : `${fotos} fotos`);
+      if (videos) partes.push(videos === 1 ? '1 vídeo' : `${videos} vídeos`);
+      return partes.join(' y ');
+    }
+
+    function textoBoton(): string {
+      if (pendientes.length === 1) return esVideo(pendientes[0]!) ? 'Subir el vídeo' : 'Subir la foto';
+      return `Subir ${resumenSeleccion()}`;
+    }
+
+    /**
+     * Pinta las dos opciones con lo que va a pesar cada una.
+     *
+     * El número importa: en original se suben la versión web Y el archivo
+     * entero, así que son ~5 MB por foto en vez de ~1. Verlo antes de lanzar la
+     * subida es lo que evita la sorpresa de 200 MB con datos móviles.
+     */
+    function pintarCalidad() {
+      const fotos = pendientes.filter((f) => !esVideo(f));
+      const bytesVideo = pendientes.filter(esVideo).reduce((a, f) => a + f.size, 0);
+      const ligera = fotos.length * PESO_WEB + bytesVideo;
+      const original = ligera + fotos.reduce((a, f) => a + f.size, 0);
+
+      // Sin fotos no hay nada que elegir: el vídeo se sube sin tocar siempre.
+      ($('calidad') as HTMLElement).hidden = fotos.length === 0;
+
+      $('pesoOriginal').textContent = `≈ ${enMB(original)} de subida`;
+      const veces = ligera > 0 ? Math.round(original / ligera) : 1;
+      $('pesoLigera').textContent = veces >= 2
+        ? `≈ ${enMB(ligera)} de subida · ${veces} veces más rápido`
+        : `≈ ${enMB(ligera)} de subida`;
+
+      for (const id of ['opcOriginal', 'opcLigera']) {
+        const el = $(id);
+        el.setAttribute('aria-checked', String(el.dataset.calidad === calidad));
+      }
+
+      // El navegador sabe si la conexión va mal; no se cambia la elección por
+      // su cuenta, solo se avisa.
+      const conexion = (navigator as any).connection;
+      const lenta = Boolean(conexion) &&
+        (conexion.saveData === true || ['slow-2g', '2g', '3g'].includes(conexion.effectiveType));
+      const aviso = $('calidadAviso') as HTMLElement;
+      if (lenta && calidad === 'original' && fotos.length) {
+        aviso.hidden = false;
+        aviso.textContent = 'Tu conexión parece lenta. Con «Más ligera» tardarás mucho menos y en la galería se verá igual.';
+      } else {
+        aviso.hidden = true;
+      }
+    }
+
+    for (const id of ['opcOriginal', 'opcLigera']) {
+      $(id).addEventListener('click', () => {
+        calidad = ($(id).dataset.calidad as Calidad) ?? 'original';
+        localStorage.setItem(LLAVE_CALIDAD, calidad);
+        pintarCalidad();
+        ($('hojaBoton') as HTMLButtonElement).textContent = textoBoton();
+      });
+    }
+
     function abrirHoja() {
-      ($('nombreInput') as HTMLInputElement).value = miNombre;
+      const input = $('nombreInput') as HTMLInputElement;
+      const pideNombre = !miNombre;
+      input.value = miNombre;
+      input.hidden = !pideNombre;
+      $('hojaTitulo').textContent = pideNombre ? '¿Quién eres?' : '¿Las subimos?';
+      $('hojaTexto').textContent = pideNombre
+        ? 'Para que Aimar y Deborah sepan de quién es cada foto.'
+        : resumenSeleccion();
+      pintarCalidad();
+      ($('hojaBoton') as HTMLButtonElement).textContent = pideNombre ? 'Continuar' : textoBoton();
       velo.classList.add('abierto');
       hoja.classList.add('abierta');
-      setTimeout(() => ($('nombreInput') as HTMLInputElement).focus(), 350);
+      // El foco solo cuando hace falta escribir: en el móvil el teclado tapa
+      // media hoja, y si el nombre ya está puesto no hay nada que teclear.
+      if (pideNombre) setTimeout(() => input.focus(), 350);
     }
     function cerrarHoja() {
       velo.classList.remove('abierto');
       hoja.classList.remove('abierta');
     }
-    velo.addEventListener('click', cerrarHoja);
+    // Cerrar tocando fuera es cancelar: lo elegido no se sube a medias.
+    velo.addEventListener('click', () => { pendientes = []; cerrarHoja(); });
 
-    async function confirmarNombre() {
-      const v = ($('nombreInput') as HTMLInputElement).value.trim();
-      if (!v) return;
-      miNombre = v;
-      localStorage.setItem('ad-nombre', v);
+    async function confirmar() {
+      const input = $('nombreInput') as HTMLInputElement;
+      if (!input.hidden) {
+        const v = input.value.trim();
+        if (!v) { input.focus(); return; }
+        miNombre = v;
+        localStorage.setItem('ad-nombre', v);
+      }
       cerrarHoja();
       await encolar();
     }
-    $('hojaBoton').addEventListener('click', confirmarNombre);
+    $('hojaBoton').addEventListener('click', confirmar);
     $('nombreInput').addEventListener('keydown', (e) => {
-      if ((e as KeyboardEvent).key === 'Enter') confirmarNombre();
+      if ((e as KeyboardEvent).key === 'Enter') confirmar();
     });
 
     selector.addEventListener('change', async () => {
       pendientes = Array.from(selector.files ?? []);
       selector.value = '';
       if (!pendientes.length) return;
-      // El nombre se pide una sola vez, y después de elegir: primero el premio.
-      if (!miNombre) abrirHoja(); else await encolar();
+      // La hoja se abre SIEMPRE, no solo la primera vez: es donde se elige la
+      // calidad y donde se ve lo que va a pesar la subida antes de lanzarla.
+      abrirHoja();
     });
 
     async function encolar() {
@@ -913,7 +1281,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       const errores: string[] = [];
       for (const archivo of archivos) {
         try {
-          const medio = await procesar(archivo);
+          const medio = await procesar(archivo, calidad);
           await cola.encolar(medio, miNombre, deviceId);
         } catch (err) {
           errores.push(err instanceof ErrorMedio ? err.message : `No se pudo leer «${archivo.name}».`);
@@ -942,7 +1310,17 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       if (r.hechos === r.total && !r.fallidos) {
         texto.textContent = r.hechos === 1 ? '¡Gracias! Ya está en la galería' : `¡Gracias! ${r.hechos} archivos en la galería`;
         accion.hidden = true;
-        motivo.hidden = true;
+        // La foto llegó pero su copia original no. No es un fallo (la foto se
+        // ve y se puede descargar en versión web), pero hay que decirlo: si
+        // no, el invitado creería que tiene guardado un original que no existe.
+        if (r.sinOriginal) {
+          motivo.hidden = false;
+          motivo.textContent = r.sinOriginal === 1
+            ? 'En una no se pudo guardar la copia original, pero la foto está subida.'
+            : `En ${r.sinOriginal} no se pudo guardar la copia original, pero las fotos están subidas.`;
+        } else {
+          motivo.hidden = true;
+        }
         ($('progresoParar') as HTMLElement).hidden = true;
 
         // Traer saltando la caché para que las recién subidas aparezcan ya, y
@@ -957,7 +1335,16 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       // El estado tiene que ser honesto: antes, una cola parada esperando
       // cobertura seguía diciendo «Subiendo…» sin dar ninguna pista.
       const cuantas = `${r.hechos} de ${r.total} listas`;
-      if (r.sinConexion) {
+      // Cuando lo único que queda son originales, las fotos YA están en la
+      // galería. Decir «Subiendo… 0 de 1» sería falso y llevaría a subirlas
+      // otra vez pensando que no han llegado.
+      const soloOriginales = r.guardandoOriginal > 0 && r.guardandoOriginal === r.total - r.hechos;
+      if (soloOriginales && !r.sinConexion) {
+        const pct = r.progresoActual !== undefined ? ` · ${Math.round(r.progresoActual * 100)} %` : '';
+        texto.textContent = r.total === 1
+          ? `Ya está en la galería · guardando el original${pct}`
+          : `Ya están en la galería · guardando los originales${pct}`;
+      } else if (r.sinConexion) {
         texto.textContent = `Sin conexión · ${cuantas}`;
       } else if (r.reintentando) {
         texto.textContent = `Reintentando… · ${cuantas}`;

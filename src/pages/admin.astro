@@ -196,6 +196,13 @@
     .medidor { height: 10px; background: var(--blush); border-radius: 100px; overflow: hidden; margin: var(--s3) 0 var(--s2); }
     .medidor span { display: block; height: 100%; background: var(--pink-deep); border-radius: 100px; }
     .medidor-txt { font-size: .78rem; color: var(--gray); }
+    .desc-opcion {
+      display: flex; align-items: flex-start; gap: .55rem; cursor: pointer;
+      font-size: .82rem; color: var(--dark); margin: 1rem 0;
+    }
+    .desc-opcion input { margin-top: .18rem; accent-color: var(--pink-deep); }
+    .desc-opcion input:disabled + span { opacity: .45; }
+    .desc-opcion-nota { display: block; font-size: .72rem; color: var(--gray); margin-top: .15rem; }
     .medidor-txt.aviso { color: var(--err); }
 
     /* ── SUBIDA DEL REPORTAJE ────────────────────────────────────── */
@@ -396,6 +403,13 @@
             Se prepara en tandas para no saturar el móvil. De las fotos de invitados existe
             la versión de 3072&nbsp;px, que da para imprimir en 20×30&nbsp;cm.
           </p>
+          <label class="desc-opcion">
+            <input type="checkbox" id="chkOriginales" />
+            <span>
+              Bajar el original cuando exista
+              <span class="desc-opcion-nota" id="descOriginalesNota"></span>
+            </span>
+          </label>
           <button class="boton ancho" id="btnDescargar">Descargar todo</button>
           <!-- Oculta hasta que haya descarga: el carril vacío en rosa parecía
                una barra ya completa. -->
@@ -430,7 +444,12 @@
 
   const API = import.meta.env.PUBLIC_API_BASE ?? '';
   const $ = (id: string) => document.getElementById(id)!;
-  const POR_TANDA = 120;   // ~80 MB por ZIP a la calidad actual: manejable en un móvil
+  // ~80 MB por ZIP con las versiones web: manejable en un móvil. Con originales
+  // cada archivo pesa 4-5 veces más, así que la tanda se recorta en la misma
+  // proporción; si no, el ZIP se acercaría al medio giga y el navegador de un
+  // móvil se queda sin memoria montándolo.
+  const POR_TANDA = 120;
+  const POR_TANDA_ORIGINAL = 25;
 
   let api: AdminApi;
   let todo: MediaAdmin[] = [];
@@ -990,14 +1009,29 @@
     return todo.filter((i) => !i.oculta).sort((a, b) => a.ts - b.ts);
   }
 
+  const conOriginales = () => ($('chkOriginales') as HTMLInputElement).checked;
+  const porTanda = () => (conOriginales() ? POR_TANDA_ORIGINAL : POR_TANDA);
+
+  /** La mejor versión de cada archivo según lo que se haya pedido. */
+  const fuente = (it: MediaAdmin) => (conOriginales() && it.original) || it.web;
+
   function pintarDescarga() {
     const items = paraDescargar();
-    const tandas = Math.ceil(items.length / POR_TANDA);
+    const tandas = Math.ceil(items.length / porTanda());
     $('descResumen').textContent = items.length
-      ? `${items.length} archivos · ${tandas} ${tandas === 1 ? 'descarga' : 'descargas'} de hasta ${POR_TANDA}`
+      ? `${items.length} archivos · ${tandas} ${tandas === 1 ? 'descarga' : 'descargas'} de hasta ${porTanda()}`
       : 'Todavía no hay nada que descargar.';
+
+    const conOriginal = items.filter((i) => i.original).length;
+    $('descOriginalesNota').textContent = conOriginal
+      ? `${conOriginal} de ${items.length} se subieron en calidad original`
+      : 'Ninguna de las subidas actuales tiene copia original';
+    ($('chkOriginales') as HTMLInputElement).disabled = conOriginal === 0;
+
     ($('btnDescargar') as HTMLButtonElement).disabled = items.length === 0;
   }
+
+  $('chkOriginales').addEventListener('change', pintarDescarga);
 
   $('btnDescargar').addEventListener('click', async () => {
     const items = paraDescargar();
@@ -1006,17 +1040,19 @@
     ($('descLinea') as HTMLElement).hidden = false;
 
     try {
-      for (let t = 0; t * POR_TANDA < items.length; t++) {
-        const tanda = items.slice(t * POR_TANDA, (t + 1) * POR_TANDA);
+      const tam = porTanda();
+      for (let t = 0; t * tam < items.length; t++) {
+        const tanda = items.slice(t * tam, (t + 1) * tam);
         $('descEstado').textContent = `Preparando tanda ${t + 1}…`;
 
         const ficheros: { name: string; input: Response }[] = [];
         for (let k = 0; k < tanda.length; k++) {
           const it = tanda[k]!;
-          const num = String(t * POR_TANDA + k + 1).padStart(4, '0');
-          const ext = it.web.split('.').pop() ?? 'webp';
+          const url = fuente(it);
+          const num = String(t * tam + k + 1).padStart(4, '0');
+          const ext = url.split('.').pop() ?? 'webp';
           const quien = (it.nombre || 'sin-nombre').replace(/[^\p{L}\p{N}]+/gu, '-');
-          ficheros.push({ name: `AimarDeborah-${num}-${quien}.${ext}`, input: await fetch(it.web) });
+          ficheros.push({ name: `AimarDeborah-${num}-${quien}.${ext}`, input: await fetch(url) });
           $('descBar').style.width = `${Math.round(((k + 1) / tanda.length) * 100)}%`;
         }
 

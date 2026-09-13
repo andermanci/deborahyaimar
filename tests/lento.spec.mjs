@@ -55,7 +55,11 @@ console.log('\nTres fotos de ~1 MB con una subida de 300 kbps');
 await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
 await page.setInputFiles('#selector', [0, 1, 2].map((i) => ({
   name: `f${i}.jpeg`, mimeType: 'image/jpeg', buffer: readFileSync('public/foto3.jpg') })));
-if (await page.locator('.hoja.abierta').count()) { await page.fill('#nombreInput', 'Lento'); await page.click('#hojaBoton'); }
+if (await page.locator('.hoja.abierta').count()) {
+  const campo = page.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill('Lento');
+  await page.click('#hojaBoton');
+}
 
 let vioPorcentaje = false, barraAntesDeLaPrimera = false;
 const t0 = Date.now();

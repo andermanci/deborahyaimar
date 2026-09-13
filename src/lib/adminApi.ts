@@ -19,6 +19,8 @@ export interface MediaAdmin {
   oculta: boolean;
   thumb: string;
   web: string;
+  /** Copia tal cual la subió el invitado. null si la subió en modo ligero. */
+  original: string | null;
   poster: string | null;
   duracion: number | null;
   ancho: number;

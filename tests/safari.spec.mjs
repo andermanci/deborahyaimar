@@ -37,7 +37,11 @@ await page.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
 await page.setInputFiles('#selector', { name: 'iphone.jpeg', mimeType: 'image/jpeg',
   buffer: readFileSync('public/foto.jpg') });
 await page.waitForSelector('.hoja.abierta', { timeout: 10000 }).catch(() => {});
-if (await page.locator('.hoja.abierta').count()) { await page.fill('#nombreInput', 'Safari'); await page.click('#hojaBoton'); }
+if (await page.locator('.hoja.abierta').count()) {
+  const campo = page.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill('Safari');
+  await page.click('#hojaBoton');
+}
 
 await page.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 60000 })
   .then(() => ok('la subida termina')).catch(async () => mal(`no terminó: "${await page.locator('#progresoTexto').textContent()}"`));

@@ -10,10 +10,12 @@ const FOTO = readFileSync('public/foto.jpg');
 /** El nombre se pide una vez, en una hoja, después de elegir los archivos. */
 async function rellenarNombre(pg, nombre) {
   const hoja = pg.locator('.hoja.abierta');
-  if (await hoja.count()) {
-    await pg.fill('#nombreInput', nombre);
-    await pg.click('#hojaBoton');
-  }
+  if (!(await hoja.count())) return;
+  // El nombre solo se pide la primera vez. A partir de ahí la hoja sigue
+  // apareciendo, pero solo para elegir la calidad y confirmar la subida.
+  const campo = pg.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill(nombre);
+  await pg.click('#hojaBoton');
 }
 
 const navegador = await chromium.launch({ channel: 'chrome' });
@@ -218,6 +220,7 @@ console.log('\nE) Vuelves a subir tras una sesión anterior');
   (alEntrar ?? '').trim() === '' ? ok('al volver no arrastra el progreso viejo') : mal(`arrastra: "${alEntrar}"`);
 
   await p2.setInputFiles('#selector', { name: 'c.jpg', mimeType: 'image/jpeg', buffer: FOTO });
+  await rellenarNombre(p2, 'Ander');
   await p2.waitForFunction(() => document.getElementById('progresoTexto')?.textContent?.includes('Gracias'), { timeout: 60000 });
   const texto = await p2.locator('#progresoTexto').textContent();
   texto?.includes('1 archivo') || texto?.includes('Ya está')

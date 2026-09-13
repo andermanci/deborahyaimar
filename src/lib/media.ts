@@ -5,6 +5,15 @@
  * eso es medio minuto por foto y la mitad se quedan a medias. Redimensionando
  * aquí bajamos a ~500 KB (10x más rápido), esquivamos los límites de tamaño y
  * el almacenamiento entra en el tier gratuito de R2.
+ *
+ * De cada foto salen SIEMPRE dos versiones, y opcionalmente una tercera:
+ *   thumb     600 px  — la rejilla; muchas a la vez, tienen que pesar nada
+ *   web      3072 px  — el visor a pantalla completa, e imprimible en 20x30
+ *   original  tal cual — solo si el invitado elige 'original'; no se muestra
+ *                        nunca, está para descargarla
+ *
+ * El original NO sustituye a la versión web: llega en HEIC (que Chrome y
+ * Firefox no saben pintar) y pesa 4 MB, demasiado para un carrusel.
  */
 
 // La calidad depende del formato que sepa generar el navegador.
@@ -17,16 +26,65 @@
 // WebP (Android / Chrome): 3072 px @ 85 % → ~650 KB, 20×30 cm a ~260 ppp.
 // JPEG (iPhone):           2560 px @ 80 % → ~1 MB,   20×30 cm a ~215 ppp.
 export const MAX_THUMB = 600;
-export const CALIDAD_THUMB = 0.75;
+export const CALIDAD_THUMB = 0.75;   // compresión del thumb, no el modo de subida
 const AJUSTE = {
-  'image/webp': { max: 3072, calidad: 0.85 },
-  'image/jpeg': { max: 2560, calidad: 0.80 },
+  'image/webp': { max: 3072, compresion: 0.85 },
+  'image/jpeg': { max: 2560, compresion: 0.80 },
 } as const;
 
 // Si pese a todo una foto sale demasiado grande (grano extremo, formato raro),
 // se recomprime más fuerte antes de subirla: ninguna foto debe fallar por peso.
 const TOPE_WEB = 3.5 * 1024 * 1024;
 const REINTENTOS_PESO: [number, number][] = [[2560, 0.72], [2048, 0.7], [1600, 0.68]];
+
+/**
+ * Calidad de subida que elige el invitado.
+ *   'original' — por defecto: se archiva además el archivo tal cual salió del móvil.
+ *   'ligera'   — solo thumb + web. En la galería se ve EXACTAMENTE igual; lo que
+ *                se pierde es la copia descargable. Son ~1 MB por foto en vez
+ *                de ~5, que es lo que salva una conexión mala.
+ */
+export type Calidad = 'original' | 'ligera';
+
+/**
+ * Tope del original. Cubre cualquier foto de móvil (48 MP en HEIC son ~5 MB,
+ * ProRAW ~25 MB) y deja fuera un RAW de réflex enorme, que no es el caso de uso
+ * y subiría eternamente.
+ */
+export const MAX_ORIGINAL = 50 * 1024 * 1024;
+
+/**
+ * Lo que se acepta archivar como original. Es una lista cerrada a propósito:
+ * el bucket se sirve en un dominio público, así que un archivo que el navegador
+ * interpretara como HTML sería un XSS alojado en fotos.deborahyaimar.org.
+ */
+const TIPOS_ORIGINAL: Record<string, true> = {
+  'image/jpeg': true, 'image/png': true, 'image/webp': true,
+  'image/heic': true, 'image/heif': true, 'image/avif': true,
+  'image/tiff': true, 'image/gif': true,
+};
+const POR_EXTENSION: Record<string, string> = {
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
+  heic: 'image/heic', heif: 'image/heif', avif: 'image/avif',
+  tif: 'image/tiff', tiff: 'image/tiff', gif: 'image/gif',
+};
+
+/**
+ * El original, con su tipo MIME saneado, o null si no se puede archivar.
+ *
+ * Algunos selectores de archivos de Android entregan el HEIC con `type` vacío,
+ * y el Worker rechaza lo que no lleve un tipo conocido: en ese caso se deduce
+ * de la extensión. El Blob resultante comparte los bytes con el File (slice no
+ * copia), solo cambia la etiqueta.
+ */
+function original(archivo: File): Blob | null {
+  const declarado = (archivo.type || '').toLowerCase();
+  const ext = archivo.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? '';
+  const mime = TIPOS_ORIGINAL[declarado] ? declarado : POR_EXTENSION[ext];
+  if (!mime) return null;
+  if (archivo.size > MAX_ORIGINAL) return null;
+  return archivo.slice(0, archivo.size, mime);
+}
 
 /** Tope duro de duración. La UI anuncia 15 s; aceptamos hasta 20 con margen. */
 export const MAX_SEGUNDOS = 20;
@@ -35,6 +93,8 @@ export interface FotoProcesada {
   tipo: 'foto';
   thumb: Blob;
   web: Blob;
+  /** El archivo intacto, cuando se pidió 'original' y el formato lo permite. */
+  original?: Blob;
   ancho: number;
   alto: number;
 }
@@ -72,8 +132,8 @@ function escalar(ancho: number, alto: number, max: number) {
   };
 }
 
-async function aBlob(lienzo: HTMLCanvasElement, mime: string, calidad: number): Promise<Blob> {
-  const blob = await new Promise<Blob | null>((res) => lienzo.toBlob(res, mime, calidad));
+async function aBlob(lienzo: HTMLCanvasElement, mime: string, compresion: number): Promise<Blob> {
+  const blob = await new Promise<Blob | null>((res) => lienzo.toBlob(res, mime, compresion));
   if (!blob) throw new ErrorMedio('No se pudo procesar la imagen.');
   return blob;
 }
@@ -91,7 +151,7 @@ function pintar(fuente: CanvasImageSource, ancho: number, alto: number): HTMLCan
 
 // ── Fotos ─────────────────────────────────────────────────────────────
 
-export async function procesarFoto(archivo: File): Promise<FotoProcesada> {
+export async function procesarFoto(archivo: File, calidad: Calidad = 'ligera'): Promise<FotoProcesada> {
   let bitmap: ImageBitmap;
   try {
     // `from-image` respeta la orientación EXIF: sin esto las fotos verticales
@@ -103,11 +163,11 @@ export async function procesarFoto(archivo: File): Promise<FotoProcesada> {
 
   try {
     const mime = await formatoSalida();
-    const { max, calidad } = AJUSTE[mime];
+    const { max, compresion } = AJUSTE[mime];
     const dimWeb = escalar(bitmap.width, bitmap.height, max);
     const dimThumb = escalar(bitmap.width, bitmap.height, MAX_THUMB);
 
-    let web = await aBlob(pintar(bitmap, dimWeb.ancho, dimWeb.alto), mime, calidad);
+    let web = await aBlob(pintar(bitmap, dimWeb.ancho, dimWeb.alto), mime, compresion);
     let dimFinal = dimWeb;
     for (const [max, q] of REINTENTOS_PESO) {
       if (web.size <= TOPE_WEB) break;
@@ -116,7 +176,18 @@ export async function procesarFoto(archivo: File): Promise<FotoProcesada> {
     }
     const thumb = await aBlob(pintar(bitmap, dimThumb.ancho, dimThumb.alto), mime, CALIDAD_THUMB);
 
-    return { tipo: 'foto', thumb, web, ancho: dimFinal.ancho, alto: dimFinal.alto };
+    // Guardar el original solo si aporta algo. Una foto que ya venía pequeña
+    // (un reenvío de WhatsApp, una captura) pesa lo mismo o menos que la
+    // versión web: archivarla sería pagar almacenamiento por un duplicado y
+    // ofrecer una descarga «original» de peor calidad que la que ya se ve.
+    const crudo = calidad === 'original' ? original(archivo) : null;
+    const vale = crudo !== null && crudo.size > web.size * 1.1;
+
+    return {
+      tipo: 'foto', thumb, web,
+      original: vale ? crudo! : undefined,
+      ancho: dimFinal.ancho, alto: dimFinal.alto,
+    };
   } finally {
     bitmap.close();
   }
@@ -164,11 +235,11 @@ export async function procesarVideo(archivo: File): Promise<VideoProcesado> {
     if (!ancho || !alto) throw new ErrorMedio('El vídeo no tiene imagen legible.');
 
     const mime = await formatoSalida();
-    const { max, calidad } = AJUSTE[mime];
+    const { max, compresion } = AJUSTE[mime];
     const dimPoster = escalar(ancho, alto, max);
     const dimThumb = escalar(ancho, alto, MAX_THUMB);
 
-    const poster = await aBlob(pintar(video, dimPoster.ancho, dimPoster.alto), mime, calidad);
+    const poster = await aBlob(pintar(video, dimPoster.ancho, dimPoster.alto), mime, compresion);
     const thumb = await aBlob(pintar(video, dimThumb.ancho, dimThumb.alto), mime, CALIDAD_THUMB);
 
     return {
@@ -186,8 +257,12 @@ export async function procesarVideo(archivo: File): Promise<VideoProcesado> {
   }
 }
 
-export async function procesar(archivo: File): Promise<MedioProcesado> {
+/**
+ * La calidad solo afecta a las fotos: el vídeo ya se sube sin transcodificar,
+ * así que para él 'original' y 'ligera' son exactamente lo mismo.
+ */
+export async function procesar(archivo: File, calidad: Calidad = 'ligera'): Promise<MedioProcesado> {
   if (archivo.type.startsWith('video/')) return procesarVideo(archivo);
-  if (archivo.type.startsWith('image/')) return procesarFoto(archivo);
+  if (archivo.type.startsWith('image/')) return procesarFoto(archivo, calidad);
   throw new ErrorMedio(`"${archivo.name}" no es una foto ni un vídeo.`);
 }
