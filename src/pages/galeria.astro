@@ -1271,6 +1271,25 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     // la caché del borde y recrearía el fallo original.
     const PLAZO_INDICE = 8_000;
 
+    /**
+     * fetch con plazo, para TODO lo que pida datos al arrancar.
+     *
+     * Cuando las operadoras bloquean las IP de Cloudflare, la conexión no se
+     * rechaza: se queda colgada, y el navegador tarda muchísimo en rendirse. Sin
+     * plazo, una sola petición sin contestar deja la pantalla en blanco
+     * indefinidamente, sin llegar a contarle nada al invitado. Una respuesta
+     * sana llega en centenares de milisegundos.
+     */
+    async function conPlazo(url: string): Promise<Response> {
+      const ctrl = new AbortController();
+      const reloj = setTimeout(() => ctrl.abort(), PLAZO_INDICE);
+      try {
+        return await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+      } finally {
+        clearTimeout(reloj);
+      }
+    }
+
     /** Si alguna vez llegó el índice. Falso = nunca hemos visto la galería. */
     let indiceCargado = false;
     /** El último intento no llegó. Con `indiceCargado` decide qué contarle al invitado. */
@@ -1287,27 +1306,16 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         // persona, y es lo que hace que tus fotos aparezcan al instante en vez
         // de esperar a que caduque la copia del CDN.
         if (forzar) url += `${url.includes('?') ? '&' : '?'}t=${Date.now()}`;
-        // Con plazo. Cuando las operadoras bloquean las IP de Cloudflare, la
-        // conexión no se rechaza: se queda colgada, y el navegador tarda mucho
-        // en rendirse. Sin esto el invitado se come esa espera mirando una
-        // pantalla en blanco antes de que podamos contarle lo que pasa. Una
-        // respuesta sana llega en centenares de milisegundos.
-        const ctrl = new AbortController();
-        const reloj = setTimeout(() => ctrl.abort(), PLAZO_INDICE);
-        try {
-          const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
-          if (!res.ok) return null;
-          const datos = await res.json();
-          return Array.isArray(datos.items) ? datos.items : null;
-        } finally {
-          clearTimeout(reloj);
-        }
+        const res = await conPlazo(url);
+        if (!res.ok) return null;
+        const datos = await res.json();
+        return Array.isArray(datos.items) ? datos.items : null;
       } catch { return null; }
     }
 
     async function traerCategorias(): Promise<void> {
       try {
-        const res = await fetch(`${API}/categorias.json`, { cache: 'no-store' });
+        const res = await conPlazo(`${API}/categorias.json`);
         if (!res.ok) return;
         const d = await res.json();
         if (Array.isArray(d.categorias)) categorias = d.categorias;
@@ -1334,11 +1342,15 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     async function refrescar(forzar = false) {
       const conOficial = primeraCarga || forzar || vueltas % OFICIAL_CADA === 0;
       vueltas++;
+      // Las tres a la vez. En serie, una petición colgada sumaba su plazo al de
+      // las demás: con bloqueo, la galería tardaba el doble en poder decir lo
+      // que pasaba. Las categorías son decorado (las pestañas del reportaje) y
+      // nunca deben retrasar el pintado.
       const [inv, ofi] = await Promise.all([
         traer('invitado', forzar),
         conOficial ? traer('oficial', forzar) : Promise.resolve(null),
+        primeraCarga || forzar ? traerCategorias() : Promise.resolve(),
       ]);
-      if (primeraCarga || forzar) await traerCategorias();
       const antes = invitados.length;
       // Ante un fallo de red, conservar lo que ya había: nunca vaciar la galería.
       if (inv) invitados = inv;

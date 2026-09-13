@@ -812,11 +812,17 @@ console.log('\n19) No se puede llegar al índice');
 {
   const pB = await ctx.newPage();
   pB.on('pageerror', (e) => mal(`error JS: ${e.message}`));
-  await pB.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
 
   // Así se comporta un bloqueo de verdad: la conexión ni se rechaza ni
-  // responde, se queda colgada.
+  // responde, se queda colgada. Y se cuelga TODO lo que va a ese dominio,
+  // también las categorías: con el mock de categorías respondiendo bien, esta
+  // prueba pasaba y en producción la galería se quedaba en «Un momento…» para
+  // siempre, porque esa petición no llevaba plazo y bloqueaba el pintado.
   let colgado = true;
+  await pB.route('**/categorias.json*', (r) => {
+    if (colgado) return new Promise(() => {});
+    return r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' });
+  });
   const fotos = [{
     id: 'b1', tipo: 'foto', categoria: null, nombre: 'Ana', deviceHash: 'ajena0000000',
     thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto2.jpg`, original: null, poster: null,
@@ -837,11 +843,15 @@ console.log('\n19) No se puede llegar al índice');
     ? ok('mientras se espera no dice que no haya fotos')
     : mal(`nada más entrar dice «${pronto}»`);
 
-  // Y cuando la petición se rinde, lo cuenta.
+  // Y cuando la petición se rinde, lo cuenta. El plazo son 8 s y las peticiones
+  // van en paralelo: si alguien las volviera a poner en serie, o le quitara el
+  // plazo a alguna, esto se pasaría de 14 s y fallaría.
+  const t0 = Date.now();
   await pB.waitForFunction(
     () => document.getElementById('vacioTitulo')?.textContent?.includes('fútbol'),
-    { timeout: 20000 },
-  ).then(() => ok('al rendirse explica el bloqueo')).catch(() => mal('nunca explicó nada'));
+    { timeout: 14000 },
+  ).then(() => ok(`al rendirse explica el bloqueo (${((Date.now() - t0) / 1000).toFixed(1)} s)`))
+   .catch(() => mal('se quedó colgada en «Un momento…»: alguna petición no lleva plazo'));
 
   const texto = (await pB.locator('#vacioTexto').textContent()) ?? '';
   texto.includes('a salvo') ? ok('y tranquiliza: las fotos están a salvo') : mal(`texto: "${texto.slice(0, 60)}"`);
