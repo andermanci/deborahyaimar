@@ -86,7 +86,7 @@ console.log('\n4) Lightbox');
 await page.locator('.tarjeta').first().click();
 await page.waitForSelector('.visor.abierto', { timeout: 8000 })
   .then(() => ok('el lightbox abre')).catch(() => mal('no abre'));
-const grande = await page.locator('#visorSlot img').getAttribute('src').catch(() => '');
+const grande = await page.locator('#diapoAct img').getAttribute('src').catch(() => '');
 grande?.includes('/web.') ? ok('muestra la versión grande, no la miniatura') : mal(`lightbox src: ${grande}`);
 
 console.log('\n5) El mural');

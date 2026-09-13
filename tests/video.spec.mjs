@@ -123,6 +123,72 @@ completado?.partes?.length === esperadas ? ok('envía los ETag de todas las part
 completado?.key_poster ? ok('registra la portada') : mal('no registra la portada');
 completado?.duracion_s > 0 ? ok(`registra la duración (${completado.duracion_s.toFixed(1)}s)`) : mal('no registra duración');
 
+// ── Topes del vídeo ──────────────────────────────────────────────────
+console.log('\nTopes: 1 minuto y 250 MB');
+{
+  const p2 = await ctx.newPage();
+  p2.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  let pidioFirma = false;
+  await p2.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p2.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await p2.route('**/firmar', (r) => { pidioFirma = true; return r.fulfill({ status: 500, body: 'no debería llegar aquí' }); });
+  await p2.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+
+  // Un vídeo que se pasa de peso. No hace falta que sea un vídeo de verdad: se
+  // rechaza por tamaño ANTES de intentar decodificarlo, que es justo la gracia.
+  await p2.evaluate((tope) => {
+    const blob = new Blob([new ArrayBuffer(tope + 10 * 1024 * 1024)], { type: 'video/mp4' });
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'fiesta.mp4', { type: 'video/mp4' }));
+    const input = document.getElementById('selector');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }, 250 * 1024 * 1024);
+
+  await p2.waitForSelector('.hoja.abierta', { timeout: 15000 });
+  const nota = p2.locator('#hojaNota');
+  await nota.isVisible() ? ok('avisa del vídeo antes de subir') : mal('no avisa de nada');
+  const texto = (await nota.textContent()) ?? '';
+  texto.includes('250 MB') ? ok(`dice el tope: "${texto.slice(0, 60)}…"`) : mal(`el aviso no dice el tope: "${texto}"`);
+  (await nota.getAttribute('class'))?.includes('alerta') ? ok('lo marca como problema') : mal('no lo marca como problema');
+
+  const campo = p2.locator('#nombreInput');
+  if (await campo.isVisible()) await campo.fill('Ander');
+  await p2.click('#hojaBoton');
+  await p2.waitForTimeout(2500);
+
+  const aviso = (await p2.locator('#aviso').textContent()) ?? '';
+  /ocupa \d+ MB/.test(aviso) ? ok(`y al intentarlo lo explica: "${aviso}"`) : mal(`aviso inesperado: "${aviso}"`);
+  pidioFirma ? mal('llegó a pedir firma de un vídeo que no cabe') : ok('no molesta al servidor con un vídeo que no cabe');
+  (await p2.locator('.tarjeta').count()) === 0 ? ok('no queda nada a medias en la cola') : mal('encoló algo');
+  await p2.close();
+}
+
+{
+  const p3 = await ctx.newPage();
+  p3.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await p3.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await p3.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"items":[]}' }));
+  await p3.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+
+  await p3.evaluate(() => {
+    const blob = new Blob([new ArrayBuffer(12 * 1024 * 1024)], { type: 'video/mp4' });
+    const dt = new DataTransfer();
+    dt.items.add(new File([blob], 'brindis.mp4', { type: 'video/mp4' }));
+    const input = document.getElementById('selector');
+    input.files = dt.files;
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+
+  await p3.waitForSelector('.hoja.abierta', { timeout: 15000 });
+  const texto = (await p3.locator('#hojaNota').textContent()) ?? '';
+  texto.includes('1 minuto') ? ok('un vídeo normal solo recuerda el minuto de duración') : mal(`nota inesperada: "${texto}"`);
+  (await p3.locator('#hojaNota').getAttribute('class'))?.includes('alerta') ? mal('lo marca como problema sin serlo') : ok('sin alarmismo');
+  // Sin fotos en la selección no hay calidad que elegir.
+  (await p3.locator('#calidad').isHidden()) ? ok('no ofrece elegir calidad para un vídeo suelto') : mal('ofrece calidad para un vídeo');
+  await p3.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(52)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Vídeo y reanudación correctos');

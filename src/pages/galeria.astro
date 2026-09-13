@@ -288,6 +288,12 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       text-align: center; margin-top: var(--s1);
     }
     .calidad-aviso[hidden] { display: none !important; }
+    .hoja-nota {
+      font-size: 0.72rem; line-height: 1.5; color: var(--gray);
+      text-align: center; margin-bottom: var(--s4);
+    }
+    .hoja-nota[hidden] { display: none !important; }
+    .hoja-nota.alerta { color: var(--err); }
 
     /* ── VISOR ─────────────────────────────────────────────────────── */
     .visor {
@@ -302,23 +308,46 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     .visor-escena {
       position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden;
       display: flex; align-items: center; justify-content: center;
+      /* `touch-action` no se hereda: sin esto aquí, el arrastre horizontal se
+         lo quedaría el navegador en vez de moverse la foto. */
+      touch-action: pan-y;
     }
     /* Alto DEFINIDO (100% de una escena que ya lo tiene), no automático: con
        alto automático el `max-height:100%` de la foto es circular, el navegador
        lo ignora y la imagen desborda por debajo tapando la tira y el pie. */
-    #visorSlot {
-      height: 100%; width: 100%; min-width: 0;
+    #visorSlot { height: 100%; width: 100%; min-width: 0; position: relative; overflow: hidden; }
+
+    /* Carril de tres: anterior, actual y siguiente. Al arrastrar se mueve el
+       carril entero, así que la foto de al lado ya se ve durante el gesto en
+       vez de aparecer de golpe al soltar. */
+    /* El hueco entre diapositivas separa una foto de la siguiente durante el
+       gesto: sin él, dos fotos parecidas parecen una sola imagen deslizándose.
+       Ojo: el desplazamiento del carril tiene que contarlo (ver HUECO en el
+       script), o la foto queda descuadrada al soltar. */
+    .tren { display: flex; height: 100%; width: 100%; gap: 14px; will-change: transform; }
+    .diapo {
+      flex: 0 0 100%; height: 100%;
       display: flex; align-items: center; justify-content: center;
     }
-    .visor img, .visor video { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .diapo img, .diapo video { max-width: 100%; max-height: 100%; object-fit: contain; }
     .visor-cerrar, .visor-ant, .visor-sig {
-      position: absolute; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px);
+      position: absolute;
+      /* Pastilla OSCURA, no blanca translúcida: estos botones se dibujan encima
+         de la foto, y sobre un cielo o un vestido blanco el icono desaparecía. */
+      background: rgba(12,6,9,0.45); backdrop-filter: blur(8px);
       border: none; color: #fff; cursor: pointer; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       transition: background 0.2s;
     }
-    .visor-cerrar:hover, .visor-ant:hover, .visor-sig:hover { background: rgba(255,255,255,0.22); }
-    .visor-cerrar { top: calc(var(--s4) + env(safe-area-inset-top, 0px)); right: var(--s4); width: 38px; height: 38px; font-size: 1.1rem; }
+    .visor-cerrar:hover, .visor-ant:hover, .visor-sig:hover { background: rgba(12,6,9,0.7); }
+    /* z-index: la escena es un elemento posicionado y va DESPUÉS en el DOM, así
+       que sin esto la foto se pinta encima del botón de cerrar y desaparece en
+       cuanto la imagen llega a la esquina (que en vertical es siempre). */
+    .visor-cerrar {
+      z-index: 2;
+      top: calc(var(--s4) + env(safe-area-inset-top, 0px)); right: var(--s4);
+      width: 38px; height: 38px; font-size: 1.1rem;
+    }
     .visor-ant, .visor-sig { top: 50%; transform: translateY(-50%); width: 42px; height: 42px; font-size: 1.5rem; }
     .visor-ant { left: var(--s3); } .visor-sig { right: var(--s3); }
     @media (max-width: 640px) { .visor-ant, .visor-sig { display: none; } }
@@ -509,6 +538,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       <p class="calidad-aviso" id="calidadAviso" hidden></p>
     </div>
 
+    <p class="hoja-nota" id="hojaNota" hidden></p>
     <button class="hoja-boton" id="hojaBoton">Continuar</button>
   </div>
 
@@ -517,7 +547,13 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     <button class="visor-cerrar" id="visorCerrar" aria-label="Cerrar">✕</button>
     <div class="visor-escena" id="visorEscena">
       <button class="visor-ant" id="visorAnt" aria-label="Anterior">‹</button>
-      <div id="visorSlot"></div>
+      <div id="visorSlot">
+        <div class="tren" id="visorTren">
+          <div class="diapo" id="diapoAnt"></div>
+          <div class="diapo" id="diapoAct"></div>
+          <div class="diapo" id="diapoSig"></div>
+        </div>
+      </div>
       <button class="visor-sig" id="visorSig" aria-label="Siguiente">›</button>
     </div>
     <div class="visor-tira" id="visorTira" role="tablist" aria-label="Todas las fotos" hidden></div>
@@ -541,7 +577,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
   <div class="aviso" id="aviso"></div>
 
 <script>
-  import { procesar, ErrorMedio } from '../lib/media';
+  import { procesar, ErrorMedio, MAX_VIDEO_BYTES } from '../lib/media';
   import type { Calidad } from '../lib/media';
   import { ColaSubida } from '../lib/uploadQueue';
 
@@ -758,8 +794,10 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
 
     // ── VISOR ─────────────────────────────────────────────────────
     const visor = $('visor');
-    const slot = $('visorSlot');
+    const escena = $('visorEscena');
+    const tren = $('visorTren');
     let visorId: string | null = null;
+    let animando = false;
 
     const tira = $('visorTira');
     const nodosTira = new Map<string, HTMLElement>();
@@ -827,10 +865,45 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     }
     function cerrarVisor() {
       visor.classList.remove('abierto');
-      slot.replaceChildren();
+      // Vaciar el carril para que un vídeo no siga sonando de fondo.
+      for (const id of ['diapoAnt', 'diapoAct', 'diapoSig']) $(id).replaceChildren();
       document.body.style.overflow = '';
       visorId = null;
+      animando = false;
     }
+    /**
+     * Una diapositiva del carril.
+     *
+     * Solo la ACTUAL monta un <video> de verdad: si las vecinas también lo
+     * hicieran, cada paso pondría a descargar dos vídeos que quizá nadie va a
+     * ver. Para ellas basta la portada.
+     */
+    function vista(item: Item, actual: boolean): HTMLElement {
+      if (item.tipo === 'video' && actual) {
+        const v = document.createElement('video');
+        v.src = item.web; v.controls = true; v.autoplay = true;
+        v.playsInline = true; v.poster = item.poster ?? '';
+        return v;
+      }
+      const img = document.createElement('img');
+      img.src = item.tipo === 'video' ? (item.poster ?? item.thumb) : item.web;
+      img.alt = item.nombre ? `Foto de ${item.nombre}` : 'Foto de la boda';
+      return img;
+    }
+
+    // Tiene que coincidir con el `gap` de .tren.
+    const HUECO = 14;
+    const EN_SITIO = `translate3d(calc(-100% - ${HUECO}px), 0, 0)`;
+
+    /** Deja el carril en su sitio (la del medio centrada) sin animación. */
+    function asentar() {
+      tren.style.transition = 'none';
+      tren.style.transform = EN_SITIO;
+      // Leer una propiedad de diseño fuerza el reflujo: si no, el navegador
+      // junta este cambio con el siguiente y el próximo deslizamiento no anima.
+      void tren.offsetWidth;
+    }
+
     function pintarVisor(instantaneo = false) {
       const items = visibles();
       const item = items.find((i) => i.id === visorId);
@@ -838,18 +911,14 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       // «12 / 53»: con 50 fotos, deslizar sin saber cuántas quedan es a ciegas.
       const puesto = items.indexOf(item) + 1;
       $('visorPos').textContent = items.length > 1 ? `${puesto} / ${items.length}` : '';
-      slot.replaceChildren();
-      if (item.tipo === 'video') {
-        const v = document.createElement('video');
-        v.src = item.web; v.controls = true; v.autoplay = true;
-        v.playsInline = true; v.poster = item.poster ?? '';
-        slot.appendChild(v);
-      } else {
-        const img = document.createElement('img');
-        img.src = item.web;
-        img.alt = item.nombre ? `Foto de ${item.nombre}` : 'Foto de la boda';
-        slot.appendChild(img);
-      }
+
+      const n = items.length;
+      const i = items.indexOf(item);
+      $('diapoAnt').replaceChildren(...(n > 1 ? [vista(items[(i - 1 + n) % n]!, false)] : []));
+      $('diapoAct').replaceChildren(vista(item, true));
+      $('diapoSig').replaceChildren(...(n > 1 ? [vista(items[(i + 1) % n]!, false)] : []));
+      asentar();
+
       $('visorQuien').textContent = item.nombre ?? '';
       ($('visorBorrar') as HTMLElement).hidden = !esMia(item);
       // Se dice QUÉ se descarga: las subidas en modo ligero no tienen original,
@@ -922,13 +991,47 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         etiqueta.textContent = antes;
       }
     });
-    function paso(dir: number) {
+    /**
+     * Pasa de foto moviendo el carril: la nueva entra desde el lado por el que
+     * la has llamado. Al terminar se reconstruyen las tres diapositivas y el
+     * carril vuelve a su sitio sin animación, así que siempre se puede seguir
+     * deslizando en cualquier dirección.
+     */
+    function deslizar(dir: number) {
       const items = visibles();
+      if (items.length < 2 || animando) return;
       const i = items.findIndex((x) => x.id === visorId);
       if (i < 0) return;
-      visorId = items[(i + dir + items.length) % items.length]!.id;
-      pintarVisor();
+
+      animando = true;
+      let cerrado = false;
+      const terminar = () => {
+        if (cerrado) return;
+        cerrado = true;
+        animando = false;
+        // Puede haber cambiado la lista mientras se animaba (llegan fotos cada
+        // 30 s): se recalcula en vez de fiarse del índice de antes.
+        const ahora = visibles();
+        const j = ahora.findIndex((x) => x.id === visorId);
+        if (j < 0) { pintarVisor(true); return; }
+        visorId = ahora[(j + dir + ahora.length) % ahora.length]!.id;
+        // Sin `true`: la tira acompaña con su propia animación, que es lo que
+        // hace que el gesto y la miniatura marcada se sientan la misma cosa.
+        pintarVisor();
+      };
+
+      tren.addEventListener('transitionend', terminar, { once: true });
+      // Red de seguridad: si la pestaña se oculta a media animación, el
+      // navegador no dispara transitionend y el visor se quedaría bloqueado.
+      setTimeout(terminar, 500);
+
+      tren.style.transition = 'transform 0.28s cubic-bezier(0.2, 0.9, 0.2, 1)';
+      tren.style.transform = dir > 0
+        ? `translate3d(calc(-200% - ${HUECO * 2}px), 0, 0)`
+        : 'translate3d(0, 0, 0)';
     }
+
+    const paso = deslizar;
 
     $('visorCerrar').addEventListener('click', cerrarVisor);
     $('visorAnt').addEventListener('click', () => paso(-1));
@@ -936,8 +1039,14 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
     // El hueco alrededor de la foto ya no es el propio visor: con la tira
     // debajo, la foto vive dentro de `.visor-escena`.
     visor.addEventListener('click', (e) => {
+      // Tras arrastrar, algunos navegadores mandan igualmente un click: cerrar
+      // ahí sería cerrar el visor cada vez que pasas de foto con el dedo.
+      if (huboArrastre) { huboArrastre = false; return; }
       const t = e.target as HTMLElement;
-      if (t === visor || t.id === 'visorEscena' || t.id === 'visorSlot') cerrarVisor();
+      if (t === visor || t.id === 'visorEscena' || t.id === 'visorSlot'
+          || t.classList.contains('diapo') || t.classList.contains('tren')) {
+        cerrarVisor();
+      }
     });
     document.addEventListener('keydown', (e) => {
       if (!visor.classList.contains('abierto')) return;
@@ -945,19 +1054,69 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       if (e.key === 'ArrowLeft') paso(-1);
       if (e.key === 'ArrowRight') paso(1);
     });
-    let x0 = 0, y0 = 0, gestoValido = false;
-    visor.addEventListener('touchstart', (e) => {
-      // Recorrer la tira es un gesto horizontal igual que pasar de foto: si no
-      // se distinguen, arrastrar la tira salta tres imágenes de golpe.
-      gestoValido = !(e.target as HTMLElement).closest?.('.visor-tira');
+    // El gesto vive en la ESCENA, no en el visor entero: así recorrer la tira
+    // de miniaturas (que es igual de horizontal) no salta tres fotos de golpe.
+    let x0 = 0, y0 = 0;
+    let eje: '' | 'h' | 'v' = '';
+    let arrastrando = false;
+    let huboArrastre = false;
+
+    escena.addEventListener('touchstart', (e) => {
+      if (animando || e.touches.length !== 1) return;
       x0 = e.touches[0]!.clientX; y0 = e.touches[0]!.clientY;
+      eje = '';
+      arrastrando = true;
+      huboArrastre = false;
+      tren.style.transition = 'none';
     }, { passive: true });
-    visor.addEventListener('touchend', (e) => {
-      if (!gestoValido) return;
+
+    escena.addEventListener('touchmove', (e) => {
+      if (!arrastrando) return;
+      const dx = e.touches[0]!.clientX - x0;
+      const dy = e.touches[0]!.clientY - y0;
+      // El eje se decide UNA vez, con los primeros 10 px: si se recalculara en
+      // cada movimiento, un gesto en diagonal iría dando tumbos entre los dos.
+      if (!eje) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        eje = Math.abs(dx) > Math.abs(dy) ? 'h' : 'v';
+      }
+      if (eje !== 'h' || visibles().length < 2) return;
+      huboArrastre = true;
+      tren.style.transform = `translate3d(calc(-100% + ${Math.round(dx) - HUECO}px), 0, 0)`;
+    }, { passive: true });
+
+    escena.addEventListener('touchend', (e) => {
+      if (!arrastrando) return;
+      arrastrando = false;
       const dx = e.changedTouches[0]!.clientX - x0;
       const dy = e.changedTouches[0]!.clientY - y0;
-      if (Math.abs(dy) > 90 && Math.abs(dy) > Math.abs(dx)) { cerrarVisor(); return; }
-      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) paso(dx < 0 ? 1 : -1);
+
+      // Si no llegó ningún touchmove (gestos muy rápidos, y algún navegador
+      // que los agrupa), el eje se decide aquí con el recorrido total. Sin
+      // esto un deslizamiento seco no hacía nada.
+      const direccion = eje || (Math.abs(dx) > Math.abs(dy) ? 'h' : 'v');
+      if (direccion === 'v') { if (Math.abs(dy) > 90) cerrarVisor(); return; }
+      if (visibles().length < 2) return;
+
+      // Un quinto de la pantalla, con tope de 80 px: en un móvil ancho no debe
+      // hacer falta recorrer media pantalla para pasar de foto.
+      const umbral = Math.min(80, escena.clientWidth * 0.2);
+      if (Math.abs(dx) > umbral) {
+        deslizar(dx < 0 ? 1 : -1);
+      } else {
+        // No llega: vuelve a su sitio en vez de quedarse a medias.
+        tren.style.transition = 'transform 0.22s ease';
+        tren.style.transform = EN_SITIO;
+      }
+    }, { passive: true });
+
+    // Si el sistema se lleva el gesto (una llamada, el gesto de volver de iOS),
+    // el carril no puede quedarse torcido para siempre.
+    escena.addEventListener('touchcancel', () => {
+      if (!arrastrando) return;
+      arrastrando = false;
+      tren.style.transition = 'transform 0.22s ease';
+      tren.style.transform = EN_SITIO;
     }, { passive: true });
 
     $('visorBorrar').addEventListener('click', async () => {
@@ -1209,6 +1368,31 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       }
     }
 
+    /**
+     * Nota sobre los vídeos.
+     *
+     * El tope de peso se comprueba aquí ADEMÁS de en el procesado: saber que un
+     * vídeo no cabe antes de darle a subir evita esperar a que se procese para
+     * que luego lo rechace.
+     */
+    function pintarNotaVideo() {
+      const videos = pendientes.filter(esVideo);
+      const nota = $('hojaNota') as HTMLElement;
+      if (!videos.length) { nota.hidden = true; return; }
+
+      const pasados = videos.filter((v) => v.size > MAX_VIDEO_BYTES);
+      nota.hidden = false;
+      nota.classList.toggle('alerta', pasados.length > 0);
+      if (pasados.length) {
+        const cuantos = pasados.length === 1 ? 'Un vídeo pesa' : `${pasados.length} vídeos pesan`;
+        nota.textContent =
+          `${cuantos} más de ${Math.round(MAX_VIDEO_BYTES / MB)} MB y no se podrá${pasados.length === 1 ? '' : 'n'} subir. ` +
+          'Recórtalo desde la galería del móvil, o grábalo en 1080p en vez de 4K.';
+      } else {
+        nota.textContent = 'Los vídeos se suben sin comprimir, hasta 1 minuto de duración.';
+      }
+    }
+
     for (const id of ['opcOriginal', 'opcLigera']) {
       $(id).addEventListener('click', () => {
         calidad = ($(id).dataset.calidad as Calidad) ?? 'original';
@@ -1228,6 +1412,7 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
         ? 'Para que Aimar y Deborah sepan de quién es cada foto.'
         : resumenSeleccion();
       pintarCalidad();
+      pintarNotaVideo();
       ($('hojaBoton') as HTMLButtonElement).textContent = pideNombre ? 'Continuar' : textoBoton();
       velo.classList.add('abierto');
       hoja.classList.add('abierta');

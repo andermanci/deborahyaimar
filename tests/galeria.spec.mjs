@@ -88,17 +88,22 @@ console.log('\n4) Lightbox');
 await page.locator('.tarjeta').first().click();
 await page.waitForSelector('.visor.abierto', { timeout: 3000 });
 ok('abre al tocar una foto');
-const srcAntes = await page.locator('#visorSlot img').getAttribute('src');
+const srcAntes = await page.locator('#diapoAct img').getAttribute('src');
 // Eventos táctiles reales: el handler escucha touchstart/touchend, no ratón.
 await page.evaluate(() => {
-  const lb = document.getElementById('visor');
+  // Los gestos viven en la escena, no en el visor entero: recorrer la tira de
+  // miniaturas es igual de horizontal y no debe pasar de foto.
+  const lb = document.getElementById('visorEscena');
   const toque = (x) => new Touch({ identifier: 1, target: lb, clientX: x, clientY: 400 });
   lb.dispatchEvent(new TouchEvent('touchstart', { touches: [toque(340)], bubbles: true }));
   lb.dispatchEvent(new TouchEvent('touchend', { changedTouches: [toque(40)], bubbles: true }));
 });
-await page.waitForTimeout(300);
-const hayVideo = await page.locator('#visorSlot video').count();
-hayVideo === 1 ? ok('el swipe avanza a la siguiente (el vídeo)') : mal('el swipe no avanzó');
+// Pasar de foto ahora ANIMA (0,28 s): hay que esperar a que el carril termine,
+// no un tiempo fijo que se quede corto.
+const hayVideo = await page
+  .waitForFunction(() => document.querySelectorAll('#diapoAct video').length === 1, { timeout: 5000 })
+  .then(() => true).catch(() => false);
+hayVideo ? ok('el swipe avanza a la siguiente (el vídeo)') : mal('el swipe no avanzó');
 await page.keyboard.press('Escape');
 await page.locator('.visor.abierto').count() === 0 ? ok('Escape cierra') : mal('Escape no cierra');
 
@@ -605,7 +610,7 @@ console.log('\n15) Moverse entre fotos desde el visor');
 
   // La foto no puede desbordar y taparlo todo: fue el fallo del primer intento.
   const encaja = await p8.evaluate(() => {
-    const img = document.querySelector('#visorSlot img');
+    const img = document.querySelector('#diapoAct img');
     const tira = document.getElementById('visorTira');
     if (!img || !tira) return false;
     return img.getBoundingClientRect().bottom <= tira.getBoundingClientRect().top + 1;
@@ -636,6 +641,89 @@ console.log('\n16) Una sola foto: sin tira ni contador');
   (await p9.locator('#visorTira').isHidden()) ? ok('no enseña la tira') : mal('enseña una tira de una sola foto');
   (await p9.locator('#visorPos').textContent())?.trim() === '' ? ok('no enseña «1 / 1»') : mal('enseña un contador inútil');
   await p9.close();
+}
+
+// ── 17. Gesto de pasar foto, y el botón de cerrar ────────────────────
+console.log('\n17) Deslizar entre fotos');
+{
+  // Fotos VERTICALES: llenan la escena de arriba abajo y llegan a la esquina
+  // donde vive el botón de cerrar. Es el caso que lo dejó tapado.
+  const verticales = Array.from({ length: 8 }, (_, i) => ({
+    id: `v${i}`, tipo: 'foto', categoria: null, nombre: `Invitado ${i}`, deviceHash: 'ajena0000000',
+    thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto3.jpg`, original: null, poster: null,
+    duracion: null, ancho: 800, alto: 1200, ts: 100 - i,
+  }));
+
+  const pA = await ctx.newPage();
+  pA.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await pA.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await pA.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify(r.request().url().includes('oficial') ? { items: [] } : { items: verticales }) }));
+  await pA.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await pA.waitForSelector('.tarjeta');
+  await pA.locator('.tarjeta').nth(2).click();
+  await pA.waitForSelector('.visor.abierto');
+  await pA.waitForTimeout(700);
+
+  // El fallo: la escena es un elemento posicionado y va después en el DOM, así
+  // que sin z-index la foto se pinta ENCIMA del botón de cerrar.
+  const recibe = await pA.evaluate(() => {
+    const b = document.getElementById('visorCerrar').getBoundingClientRect();
+    const encima = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+    return Boolean(encima?.closest('#visorCerrar'));
+  });
+  recibe ? ok('el botón de cerrar recibe el toque sobre una foto vertical') : mal('la foto tapa el botón de cerrar');
+
+  const caja = await pA.locator('#visorEscena').boundingBox();
+  const cy = caja.y + caja.height / 2;
+  const cdp = await pA.context().newCDPSession(pA);
+  const arrastrar = async (desde, hasta, y = cy, soltar = true) => {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: desde, y: cy }] });
+    const pasos = 6;
+    for (let k = 1; k <= pasos; k++) {
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [
+        { x: Math.round(desde + ((hasta - desde) * k) / pasos), y: Math.round(cy + ((y - cy) * k) / pasos) } ] });
+      await pA.waitForTimeout(25);
+    }
+    if (soltar) { await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await pA.waitForTimeout(700); }
+  };
+  const pos = async () => (await pA.locator('#visorPos').textContent())?.trim();
+  const desplazamiento = async () => pA.evaluate(() =>
+    Math.round(new DOMMatrix(getComputedStyle(document.getElementById('visorTren')).transform).m41));
+
+  const reposo = await desplazamiento();
+  const antes = await pos();
+
+  // A media arrastre la foto de al lado ya tiene que verse: es el efecto.
+  await arrastrar(320, 140, cy, false);
+  const enGesto = await desplazamiento();
+  enGesto < reposo - 100
+    ? ok('el carril sigue al dedo (la foto de al lado ya asoma)')
+    : mal(`el carril no se movió: ${reposo} → ${enGesto}`);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await pA.waitForTimeout(700);
+
+  (await pos()) !== antes ? ok(`al soltar pasa de foto (${antes} → ${await pos()})`) : mal('no pasó de foto');
+  (await desplazamiento()) === reposo
+    ? ok('y el carril queda cuadrado para el siguiente gesto')
+    : mal(`carril descuadrado: ${await desplazamiento()} en vez de ${reposo}`);
+
+  await arrastrar(80, 300);
+  (await pos()) === antes ? ok('hacia el otro lado vuelve a la anterior') : mal(`volvió a "${await pos()}"`);
+
+  // Un arrastre corto no puede pasar de foto ni dejar el carril torcido.
+  await arrastrar(200, 168);
+  (await pos()) === antes && (await desplazamiento()) === reposo
+    ? ok('un arrastre corto vuelve a su sitio sin cambiar de foto')
+    : mal(`arrastre corto: "${await pos()}", carril ${await desplazamiento()}`);
+
+  // El visor no puede cerrarse al soltar un arrastre.
+  (await pA.locator('.visor.abierto').count()) === 1 ? ok('deslizar no cierra el visor') : mal('el visor se cerró al deslizar');
+
+  // Vertical sí cierra, como antes.
+  await arrastrar(195, 195, cy + 200);
+  (await pA.locator('.visor.abierto').count()) === 0 ? ok('deslizar hacia abajo sigue cerrando') : mal('no cierra al deslizar abajo');
+  await pA.close();
 }
 
 await navegador.close();

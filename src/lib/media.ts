@@ -86,8 +86,27 @@ function original(archivo: File): Blob | null {
   return archivo.slice(0, archivo.size, mime);
 }
 
-/** Tope duro de duración. La UI anuncia 15 s; aceptamos hasta 20 con margen. */
-export const MAX_SEGUNDOS = 20;
+/**
+ * Tope de duración del vídeo.
+ *
+ * Eran 20 s, pensados para el directo de la boda: con el 4G saturado, un vídeo
+ * más largo no llegaba. Ya pasada la boda y subiendo desde casa, 20 s cortan a
+ * la gente a media frase; un minuto es lo que dura un brindis, un baile o una
+ * entrada.
+ */
+export const MAX_SEGUNDOS = 60;
+
+/**
+ * Tope de peso del vídeo. No se transcodifica nada: sube el archivo tal cual.
+ *
+ * Un minuto de 1080p son 55 MB en un iPhone y ~120 MB en un Android (que suele
+ * grabar en H.264, con más bitrate); 4K30 de iPhone, ~180 MB. Con 250 MB entra
+ * todo eso y solo se queda fuera 4K60, que es un ajuste raro y se avisa.
+ *
+ * Ojo: aquí es donde se va el almacenamiento de verdad. 40 vídeos a este tope
+ * son los 10 GB del tramo gratuito enteros; en fotos harían falta 2.000.
+ */
+export const MAX_VIDEO_BYTES = 250 * 1024 * 1024;
 
 export interface FotoProcesada {
   tipo: 'foto';
@@ -197,6 +216,16 @@ export async function procesarFoto(archivo: File, calidad: Calidad = 'ligera'): 
 
 /** Carga metadatos y extrae un fotograma. El vídeo no se transcodifica. */
 export async function procesarVideo(archivo: File): Promise<VideoProcesado> {
+  // Lo primero, antes de leer nada: que no se pase medio minuto procesando un
+  // vídeo que el servidor va a rechazar de todas formas.
+  if (archivo.size > MAX_VIDEO_BYTES) {
+    const mb = (n: number) => Math.round(n / 1024 / 1024);
+    throw new ErrorMedio(
+      `Ese vídeo ocupa ${mb(archivo.size)} MB y el máximo son ${mb(MAX_VIDEO_BYTES)} MB. ` +
+      'Recórtalo desde la galería del móvil, o grábalo en 1080p en vez de 4K.'
+    );
+  }
+
   const url = URL.createObjectURL(archivo);
   const video = document.createElement('video');
   video.preload = 'metadata';
@@ -217,8 +246,8 @@ export async function procesarVideo(archivo: File): Promise<VideoProcesado> {
     }
     if (duracion > MAX_SEGUNDOS) {
       throw new ErrorMedio(
-        `El vídeo dura ${Math.round(duracion)} s y el máximo son ${MAX_SEGUNDOS}. ` +
-        'Graba uno más corto o recórtalo desde la galería del móvil.'
+        `El vídeo dura ${Math.round(duracion)} s y el máximo es 1 minuto. ` +
+        'Recórtalo desde la galería del móvil y sube el trozo que más te guste.'
       );
     }
 

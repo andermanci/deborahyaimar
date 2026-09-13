@@ -31,9 +31,12 @@ const TIPOS_OK: Record<string, number> = {
   // Con el tope anterior de 2 MB esas se habrían rechazado.
   'image/webp': 6_000_000,     // thumb y web salen del canvas como webp
   'image/jpeg': 6_000_000,     // fallback si el navegador no da webp
-  'video/mp4': 100_000_000,
-  'video/quicktime': 100_000_000,   // iPhone
-  'video/webm': 100_000_000,        // Chrome en Android
+  // El vídeo sube tal cual, sin transcodificar. Un minuto (el tope de duración
+  // que impone el cliente) son 55 MB en 1080p de iPhone, ~120 MB en Android y
+  // ~180 MB en 4K30. Con 250 MB entra todo salvo 4K60, que el cliente ya avisa.
+  'video/mp4': 262_144_000,
+  'video/quicktime': 262_144_000,   // iPhone
+  'video/webm': 262_144_000,        // Chrome en Android
 };
 
 /**
@@ -52,8 +55,11 @@ const TIPOS_ORIGINAL: Record<string, true> = {
 };
 const MAX_ORIGINAL = 50_000_000;
 
-const PART_SIZE = 5 * 1024 * 1024;   // mínimo de S3 para partes no finales
-const MAX_PARTES = 20;               // → 100 MB de vídeo como techo
+// Las partes siguen siendo de 5 MB (el mínimo de S3 para las no finales) en vez
+// de agrandarlas: cuanto más pequeña la parte, menos se pierde al cortarse la
+// conexión, que es de lo que va toda la cola.
+const PART_SIZE = 5 * 1024 * 1024;
+const MAX_PARTES = 50;               // → 250 MB de vídeo como techo
 const TTL_INDICE = 15;               // segundos de frescura del índice
 const FIRMA_TTL = 6 * 3600;          // 6 h: una subida lenta jamás caduca a medias
 
@@ -288,6 +294,7 @@ async function firmar(req: Request, env: Env): Promise<Response> {
       const partes = Math.ceil(size / PART_SIZE);
       if (partes > MAX_PARTES) return error('vídeo demasiado grande', env);
 
+
       const cliente = r2Client(env);
       const creada = await cliente.fetch(r2Url(env, key, 'uploads'), {
         method: 'POST',
@@ -299,10 +306,12 @@ async function firmar(req: Request, env: Env): Promise<Response> {
       const uploadId = xml.match(/<UploadId>([^<]+)<\/UploadId>/)?.[1];
       if (!uploadId) return error('respuesta inesperada de R2', env, 502);
 
-      const urls: string[] = [];
-      for (let n = 1; n <= partes; n++) {
-        urls.push(await firmarPut(env, key, `partNumber=${n}&uploadId=${encodeURIComponent(uploadId)}`));
-      }
+      // En paralelo: con 50 partes, firmar una a una alargaba /firmar sin
+      // ninguna necesidad. Cada firma es independiente de las demás.
+      const urls = await Promise.all(
+        Array.from({ length: partes }, (_, i) =>
+          firmarPut(env, key, `partNumber=${i + 1}&uploadId=${encodeURIComponent(uploadId)}`))
+      );
 
       await env.DB.prepare(
         'insert into subidas_parciales (id, key, upload_id, created_at) values (?, ?, ?, ?)'
