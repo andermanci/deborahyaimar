@@ -726,6 +726,66 @@ console.log('\n17) Deslizar entre fotos');
   await pA.close();
 }
 
+// ── 18. Nada invisible se traga los clics de la rejilla ──────────────
+// En escritorio la hoja de subida se esconde con opacity:0, y un elemento
+// transparente SIGUE recibiendo clics: era un rectángulo invisible de 420 px en
+// mitad de la pantalla que se comía los clics de las fotos de detrás, sin
+// cambiar siquiera el cursor. Se barre la rejilla punto a punto.
+console.log('\n18) La rejilla responde en toda su superficie');
+{
+  const fotos = Array.from({ length: 60 }, (_, i) => ({
+    id: `z${i}`, tipo: 'foto', categoria: null, nombre: `Inv ${i}`, deviceHash: 'ajena0000000',
+    thumb: `${BASE}/foto2.jpg`, web: `${BASE}/foto3.jpg`, original: null, poster: null,
+    duracion: null, ancho: [800, 1200, 900][i % 3], alto: [1200, 800, 900][i % 3], ts: 100000 - i,
+  }));
+
+  // Escritorio: es donde la hoja se esconde con opacity en vez de apartarse.
+  const ancho = await navegador.newContext({ viewport: { width: 1280, height: 900 } });
+  const pC = await ancho.newPage();
+  pC.on('pageerror', (e) => mal(`error JS: ${e.message}`));
+  await pC.route('**/categorias.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: '{"categorias":[]}' }));
+  await pC.route('**/indice.json*', (r) => r.fulfill({ status: 200, contentType: 'application/json',
+    body: JSON.stringify(r.request().url().includes('oficial') ? { items: [] } : { items: fotos }) }));
+  await pC.goto(`${BASE}/galeria/`, { waitUntil: 'networkidle' });
+  await pC.waitForSelector('.tarjeta');
+  await pC.waitForTimeout(900);
+
+  const culpables = await pC.evaluate(() => {
+    const cuenta = {};
+    for (const c of document.querySelectorAll('.tarjeta')) {
+      const b = c.getBoundingClientRect();
+      if (b.bottom <= 0 || b.top >= innerHeight || b.height < 2) continue;
+      for (let fx = 0.15; fx <= 0.85; fx += 0.175) {
+        for (let fy = 0.15; fy <= 0.85; fy += 0.175) {
+          const y = b.top + b.height * fy;
+          if (y < 1 || y > innerHeight - 1) continue;
+          const e = document.elementFromPoint(b.left + b.width * fx, y);
+          if (e?.closest('.tarjeta') === c) continue;
+          // El botón de añadir fotos SÍ debe flotar por encima: es visible.
+          if (e?.closest('#fab')) continue;
+          const k = e ? `${e.tagName}.${(e.className || '').toString().split(' ')[0]}` : 'nada';
+          cuenta[k] = (cuenta[k] || 0) + 1;
+        }
+      }
+    }
+    return cuenta;
+  });
+  Object.keys(culpables).length === 0
+    ? ok('ninguna zona muerta en la rejilla')
+    : mal(`hay algo invisible encima: ${JSON.stringify(culpables)}`);
+
+  // Y la hoja tiene que seguir siendo clicable cuando se abre de verdad.
+  await pC.setInputFiles('#selector', { name: 'x.jpg', mimeType: 'image/jpeg', buffer: readFileSync('public/foto2.jpg') });
+  await pC.waitForSelector('.hoja.abierta');
+  await pC.waitForTimeout(500);
+  const responde = await pC.evaluate(() => {
+    const b = document.getElementById('hojaBoton').getBoundingClientRect();
+    return Boolean(document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2)?.closest('#hojaBoton'));
+  });
+  responde ? ok('y abierta sigue respondiendo al clic') : mal('la hoja abierta no recibe clics');
+  await ancho.close();
+}
+
 await navegador.close();
 console.log(`\n${'─'.repeat(50)}`);
 console.log(fallos.length ? `❌ ${fallos.length} fallo(s)` : '✅ Todo correcto');

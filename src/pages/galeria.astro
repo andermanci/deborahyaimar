@@ -235,8 +235,14 @@ const mediaBase = import.meta.env.PUBLIC_MEDIA_BASE ?? '';
       padding: var(--s5) var(--s5) calc(var(--s6) + env(safe-area-inset-bottom, 0px));
       transform: translateY(102%); transition: transform 0.36s cubic-bezier(0.2, 0.9, 0.2, 1);
       box-shadow: 0 -8px 40px rgba(40,20,28,0.18);
+      /* Cerrada NO puede recibir clics. En escritorio se esconde con opacity:0,
+         y un elemento transparente sigue estando ahí para el ratón: era un
+         rectángulo invisible de 420 px en mitad de la pantalla que se tragaba
+         los clics de las fotos que tuviera detrás, sin ni siquiera cambiar el
+         cursor. El velo ya lo hacía bien; la hoja se quedó sin ello. */
+      pointer-events: none;
     }
-    .hoja.abierta { transform: none; }
+    .hoja.abierta { transform: none; pointer-events: auto; }
     @media (min-width: 640px) {
       .hoja { left: 50%; right: auto; bottom: 50%; width: min(420px, 92vw);
               transform: translate(-50%, 60%) scale(0.96); border-radius: 18px; opacity: 0; }
